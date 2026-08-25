@@ -1,0 +1,56 @@
+{
+  "timestamp": "2026-08-25T17:18:41.200Z",
+  "target_url": "http://provider.panel-stream.net:8080/live/pr%E2%80%A6b303/p1%E2%80%A6229c/10452.ts",
+  "probed_formats": [
+    {
+      "format": "ts",
+      "url": "http://provider.panel-stream.net:8080/live/pr%E2%80%A6b303/p1%E2%80%A6229c/10452.ts",
+      "headStatus": 405,
+      "headContentType": null,
+      "headMethodUsed": "GET_RANGE_FALLBACK",
+      "getRangeStatus": 206,
+      "getContentType": "video/mp2t",
+      "bytesReceived": 1024,
+      "sniffResult": {
+        "detectedType": "MPEG-TS",
+        "confidence": 0.95,
+        "syncByteCount": 5,
+        "firstSyncOffset": 0,
+        "isMpegTs188": true,
+        "isHls": false,
+        "isHtml": false,
+        "rawHeaderHex": "474011100042f0260001c10000ff01ff0001fc80144812010655533a204553504e",
+        "demuxerNotes": "Raw MPEG-TS (188-byte packet stream) with 5 consecutive 0x47 sync bytes starting at offset 0."
+      },
+      "usableForPlayback": true
+    },
+    {
+      "format": "m3u8",
+      "url": "http://provider.panel-stream.net:8080/live/pr%E2%80%A6b303/p1%E2%80%A6229c/10452.m3u8",
+      "headStatus": 200,
+      "headContentType": "application/vnd.apple.mpegurl",
+      "headMethodUsed": "HEAD",
+      "getRangeStatus": 200,
+      "getContentType": "application/vnd.apple.mpegurl",
+      "bytesReceived": 842,
+      "sniffResult": {
+        "detectedType": "HLS",
+        "confidence": 1,
+        "syncByteCount": 0,
+        "firstSyncOffset": -1,
+        "isMpegTs188": false,
+        "isHls": true,
+        "isHtml": false,
+        "rawHeaderHex": "234558544d33550a234558542d582d56455253494f4e3a330a234558542d582d",
+        "demuxerNotes": "HLS Master/Media playlist. Demuxer should use HLS manifest parser."
+      },
+      "usableForPlayback": true
+    }
+  ],
+  "overallAssessment": {
+    "streamType": "MIXED",
+    "preferredFormat": "m3u8",
+    "fallbackFormat": "ts",
+    "demuxerConfiguration": "Primary HLS (.m3u8) for adaptive seeking and recovery, fallback to raw MPEG-TS (.ts) with mpv format=mpegts."
+  }
+}

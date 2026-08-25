@@ -1,0 +1,27 @@
+[
+  {
+    "category_id": "1",
+    "category_name": "US | GENERAL ENTERTAINMENT",
+    "parent_id": 0
+  },
+  {
+    "category_id": "2",
+    "category_name": "US | NEWS & WEATHER",
+    "parent_id": 0
+  },
+  {
+    "category_id": "3",
+    "category_name": "US | LIVE SPORTS (60FPS)",
+    "parent_id": 0
+  },
+  {
+    "category_id": "4",
+    "category_name": "UK | PREMIUM CHANNELS",
+    "parent_id": 0
+  },
+  {
+    "category_id": "5",
+    "category_name": "CA | REGIONAL NETWORKS",
+    "parent_id": 0
+  }
+]

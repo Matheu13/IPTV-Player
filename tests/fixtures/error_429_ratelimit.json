@@ -1,0 +1,7 @@
+{
+  "status": 429,
+  "error": "Too Many Requests",
+  "message": "Rate limit exceeded. Temporary cooldown in effect. Exponential backoff required.",
+  "retry_after_seconds": 60,
+  "ip_ban_temporary": true
+}

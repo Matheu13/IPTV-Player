@@ -1,0 +1,6 @@
+{
+  "name": "IPTV Player & Diagnostics",
+  "description": "IPTV Player Suite - Milestone 0 Diagnostics, Milestone 1 Data Layer, Milestone 2 Playback Engine, Milestone 3 Suite (2D EPG Grid, Catchup, VOD & Series Catalogue, Continue Watching), and Milestone 4a EPG Data Engine (Streaming XMLTV Parser, SQLite compound indexing, Fuzzy tvg-id Matching, and Now/Next surfacing)",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
