@@ -86,6 +86,49 @@ export class SQLiteEpgDB {
         updated_at INTEGER NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS iptv_sources (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        source_type TEXT NOT NULL,
+        base_url TEXT NOT NULL,
+        username TEXT,
+        status TEXT NOT NULL,
+        max_connections INTEGER DEFAULT 1,
+        channel_count INTEGER DEFAULT 0,
+        category_count INTEGER DEFAULT 0,
+        last_refreshed_at INTEGER,
+        metadata_json TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS iptv_categories (
+        id TEXT NOT NULL,
+        source_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        parent_id INTEGER DEFAULT 0,
+        channel_count INTEGER DEFAULT 0,
+        PRIMARY KEY (id, source_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS iptv_channels (
+        id TEXT NOT NULL,
+        source_id TEXT NOT NULL,
+        stream_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        stream_type TEXT NOT NULL DEFAULT 'live',
+        category_id TEXT NOT NULL,
+        category_name TEXT,
+        stream_icon TEXT,
+        epg_channel_id TEXT,
+        tv_archive INTEGER DEFAULT 0,
+        tv_archive_duration INTEGER DEFAULT 0,
+        num INTEGER DEFAULT 0,
+        formats_json TEXT,
+        resolved_stream_url TEXT,
+        active_format TEXT,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (id, source_id)
+      );
+
       -- Critical Performance Indexes for Sub-millisecond Now/Next & Schedule Queries
       CREATE INDEX IF NOT EXISTS idx_epg_prog_ch_start 
       ON epg_programmes(channel_id, start_time_epoch);
@@ -98,6 +141,15 @@ export class SQLiteEpgDB {
 
       CREATE INDEX IF NOT EXISTS idx_epg_prog_time_window 
       ON epg_programmes(start_time_epoch, stop_time_epoch);
+
+      CREATE INDEX IF NOT EXISTS idx_iptv_chan_cat 
+      ON iptv_channels(category_id);
+
+      CREATE INDEX IF NOT EXISTS idx_iptv_chan_name 
+      ON iptv_channels(name);
+
+      CREATE INDEX IF NOT EXISTS idx_iptv_chan_source 
+      ON iptv_channels(source_id);
     `);
   }
 
@@ -631,6 +683,241 @@ export class SQLiteEpgDB {
     }
 
     this.insertProgrammesBatch(programmes);
+  }
+
+  /**
+   * Saves IPTV Source Configuration & Sync Status
+   */
+  public saveSource(source: {
+    id: string;
+    name: string;
+    sourceType: string;
+    baseUrl: string;
+    username?: string;
+    status: string;
+    maxConnections?: number;
+    channelCount?: number;
+    categoryCount?: number;
+    lastRefreshedAt?: number;
+    metadataJson?: string;
+  }): void {
+    const stmt = this.db.prepare(`
+      INSERT INTO iptv_sources (
+        id, name, source_type, base_url, username, status,
+        max_connections, channel_count, category_count, last_refreshed_at, metadata_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        name = excluded.name,
+        status = excluded.status,
+        max_connections = excluded.max_connections,
+        channel_count = excluded.channel_count,
+        category_count = excluded.category_count,
+        last_refreshed_at = excluded.last_refreshed_at,
+        metadata_json = excluded.metadata_json;
+    `);
+
+    stmt.run(
+      source.id,
+      source.name,
+      source.sourceType,
+      source.baseUrl,
+      source.username || null,
+      source.status,
+      source.maxConnections || 1,
+      source.channelCount || 0,
+      source.categoryCount || 0,
+      source.lastRefreshedAt || Date.now(),
+      source.metadataJson || null
+    );
+  }
+
+  /**
+   * Retrieves all configured sources
+   */
+  public getSources(): any[] {
+    const stmt = this.db.prepare(`SELECT * FROM iptv_sources ORDER BY last_refreshed_at DESC;`);
+    return stmt.all() as any[];
+  }
+
+  /**
+   * Batch inserts live categories
+   */
+  public insertLiveCategories(sourceId: string, categories: { id: string; name: string; parentId?: number; channelCount?: number }[]): number {
+    if (!categories || categories.length === 0) return 0;
+    const stmt = this.db.prepare(`
+      INSERT INTO iptv_categories (id, source_id, name, parent_id, channel_count)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(id, source_id) DO UPDATE SET
+        name = excluded.name,
+        parent_id = excluded.parent_id,
+        channel_count = excluded.channel_count;
+    `);
+
+    this.db.exec('BEGIN TRANSACTION;');
+    try {
+      for (const cat of categories) {
+        stmt.run(String(cat.id), sourceId, cat.name, cat.parentId || 0, cat.channelCount || 0);
+      }
+      this.db.exec('COMMIT;');
+      return categories.length;
+    } catch (err) {
+      this.db.exec('ROLLBACK;');
+      throw err;
+    }
+  }
+
+  /**
+   * Batch inserts thousands of live channels in rapid transaction blocks
+   */
+  public insertLiveChannelsBatch(sourceId: string, channels: any[]): number {
+    if (!channels || channels.length === 0) return 0;
+    const now = Date.now();
+
+    const stmt = this.db.prepare(`
+      INSERT INTO iptv_channels (
+        id, source_id, stream_id, name, stream_type, category_id, category_name,
+        stream_icon, epg_channel_id, tv_archive, tv_archive_duration, num,
+        formats_json, resolved_stream_url, active_format, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id, source_id) DO UPDATE SET
+        stream_id = excluded.stream_id,
+        name = excluded.name,
+        category_id = excluded.category_id,
+        category_name = excluded.category_name,
+        stream_icon = excluded.stream_icon,
+        epg_channel_id = excluded.epg_channel_id,
+        tv_archive = excluded.tv_archive,
+        tv_archive_duration = excluded.tv_archive_duration,
+        num = excluded.num,
+        formats_json = excluded.formats_json,
+        resolved_stream_url = excluded.resolved_stream_url,
+        active_format = excluded.active_format,
+        updated_at = excluded.updated_at;
+    `);
+
+    this.db.exec('BEGIN TRANSACTION;');
+    try {
+      for (const ch of channels) {
+        stmt.run(
+          String(ch.id || `stream_${ch.streamId}`),
+          sourceId,
+          Number(ch.streamId) || 0,
+          ch.name || 'Untitled Channel',
+          ch.streamType || 'live',
+          String(ch.categoryId || 'uncategorized'),
+          ch.categoryName || 'General',
+          ch.streamIcon || null,
+          ch.epgChannelId || null,
+          ch.tvArchive ? 1 : 0,
+          Number(ch.tvArchiveDurationDays) || 0,
+          Number(ch.num) || 0,
+          JSON.stringify(ch.formatsAvailable || ['m3u8', 'ts']),
+          ch.resolvedStreamUrl || '',
+          ch.activeFormat || 'm3u8',
+          now
+        );
+      }
+      this.db.exec('COMMIT;');
+      return channels.length;
+    } catch (err) {
+      this.db.exec('ROLLBACK;');
+      throw err;
+    }
+  }
+
+  /**
+   * Retrieves live categories with channel counts
+   */
+  public getLiveCategories(sourceId?: string): any[] {
+    if (sourceId) {
+      const stmt = this.db.prepare(`
+        SELECT c.*, COUNT(ch.id) as real_channel_count 
+        FROM iptv_categories c
+        LEFT JOIN iptv_channels ch ON ch.category_id = c.id AND ch.source_id = c.source_id
+        WHERE c.source_id = ?
+        GROUP BY c.id
+        ORDER BY c.name ASC;
+      `);
+      return stmt.all(sourceId) as any[];
+    } else {
+      const stmt = this.db.prepare(`
+        SELECT c.*, COUNT(ch.id) as real_channel_count 
+        FROM iptv_categories c
+        LEFT JOIN iptv_channels ch ON ch.category_id = c.id AND ch.source_id = c.source_id
+        GROUP BY c.id, c.source_id
+        ORDER BY c.name ASC;
+      `);
+      return stmt.all() as any[];
+    }
+  }
+
+  /**
+   * Fast indexed pagination and filtering across thousands of live channels
+   */
+  public getLiveChannels(options: {
+    sourceId?: string;
+    categoryId?: string;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  } = {}): any[] {
+    const limit = Math.min(200, Math.max(1, options.limit || 50));
+    const offset = Math.max(0, options.offset || 0);
+
+    let query = `SELECT * FROM iptv_channels WHERE 1=1`;
+    const params: any[] = [];
+
+    if (options.sourceId) {
+      query += ` AND source_id = ?`;
+      params.push(options.sourceId);
+    }
+
+    if (options.categoryId && options.categoryId !== 'all') {
+      query += ` AND category_id = ?`;
+      params.push(options.categoryId);
+    }
+
+    if (options.search && options.search.trim()) {
+      query += ` AND name LIKE ?`;
+      params.push(`%${options.search.trim()}%`);
+    }
+
+    query += ` ORDER BY num ASC, name ASC LIMIT ? OFFSET ?;`;
+    params.push(limit, offset);
+
+    const stmt = this.db.prepare(query);
+    return stmt.all(...params) as any[];
+  }
+
+  /**
+   * Total channel count for current filter
+   */
+  public getLiveChannelsCount(options: {
+    sourceId?: string;
+    categoryId?: string;
+    search?: string;
+  } = {}): number {
+    let query = `SELECT COUNT(*) as count FROM iptv_channels WHERE 1=1`;
+    const params: any[] = [];
+
+    if (options.sourceId) {
+      query += ` AND source_id = ?`;
+      params.push(options.sourceId);
+    }
+
+    if (options.categoryId && options.categoryId !== 'all') {
+      query += ` AND category_id = ?`;
+      params.push(options.categoryId);
+    }
+
+    if (options.search && options.search.trim()) {
+      query += ` AND name LIKE ?`;
+      params.push(`%${options.search.trim()}%`);
+    }
+
+    const stmt = this.db.prepare(query);
+    const row = stmt.get(...params) as any;
+    return row ? Number(row.count) : 0;
   }
 }
 

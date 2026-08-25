@@ -227,6 +227,21 @@ export class XmltvStreamParser {
   }
 
   /**
+   * Helper to parse an in-memory XML string directly
+   */
+  public async parseXmlString(xmlString: string): Promise<{ channels: XmltvChannel[]; programmes: UnifiedEpgProgram[]; stats: StreamParserStats }> {
+    const channels: XmltvChannel[] = [];
+    const programmes: UnifiedEpgProgram[] = [];
+    const parser = new XmltvStreamParser({
+      onChannel: (ch) => { channels.push(ch); },
+      onProgrammeBatch: (batch) => { programmes.push(...batch); },
+    });
+    await parser.processChunk(xmlString);
+    const stats = await parser.finish();
+    return { channels, programmes, stats };
+  }
+
+  /**
    * Parses an input stream (with optional gzip auto-detection)
    */
   public static async parseStream(

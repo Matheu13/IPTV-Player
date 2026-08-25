@@ -48,14 +48,22 @@ export function redactUrl(rawUrl: string): string {
   try {
     const parsed = new URL(rawUrl);
 
-    // 1. Redact credential-bearing query params
+    // 1. Redact username / password in URL authority (http://user:pass@host/)
+    if (parsed.username) {
+      parsed.username = partialRedact(parsed.username);
+    }
+    if (parsed.password) {
+      parsed.password = partialRedact(parsed.password);
+    }
+
+    // 2. Redact credential-bearing query params
     for (const [key, value] of Array.from(parsed.searchParams.entries())) {
       if (CREDENTIAL_KEY_REGEX.test(key) || CREDENTIAL_PREFIX_REGEX.test(key)) {
         parsed.searchParams.set(key, partialRedact(value));
       }
     }
 
-    // 2. Redact positional path segments for Xtream URLs:
+    // 3. Redact positional path segments for Xtream URLs:
     // Segments: ['', 'live', 'USERNAME', 'PASSWORD', '12345.ts']
     const segments = parsed.pathname.split('/');
     if (segments.length >= 4) {
@@ -95,10 +103,6 @@ export function redact<T>(input: T): T {
   }
 
   if (typeof input === 'string') {
-    // Check if it's a URL or contains URLs
-    if (input.startsWith('http://') || input.startsWith('https://')) {
-      return redactUrl(input) as unknown as T;
-    }
     // Check if it's a JSON string
     if ((input.startsWith('{') && input.endsWith('}')) || (input.startsWith('[') && input.endsWith(']'))) {
       try {
@@ -108,7 +112,23 @@ export function redact<T>(input: T): T {
         // Not valid JSON, continue to string redaction
       }
     }
-    return redactUrl(input) as unknown as T;
+
+    // 1. Replace embedded full URLs
+    let redactedText = input.replace(/https?:\/\/[^\s"'<>]+/gi, (urlMatch) => {
+      return redactUrl(urlMatch);
+    });
+
+    // 2. Replace any residual user:password@ credentials
+    redactedText = redactedText.replace(/([a-zA-Z0-9_.-]+):([^\s@/:]{3,})@/g, (_m, u, p) => {
+      return `${u}:${partialRedact(p)}@`;
+    });
+
+    // 3. Replace token=... or secret=... or password=... in query or free text
+    redactedText = redactedText.replace(/(token|secret|password|passwd|api_key|auth)=([^\s&"'>]+)/gi, (_m, key, val) => {
+      return `${key}=${partialRedact(val)}`;
+    });
+
+    return redactedText as unknown as T;
   }
 
   if (Array.isArray(input)) {

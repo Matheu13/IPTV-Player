@@ -11,7 +11,7 @@ async function main() {
   console.log('='.repeat(72));
 
   // Parse CLI args if provided: --host <url> --user <username> --pass <password> --stream <id>
-  const args = process.argv.slice(2);
+  const args = typeof process !== 'undefined' && Array.isArray(process.argv) ? process.argv.slice(2) : [];
   let host = '';
   let username = '';
   let password = '';

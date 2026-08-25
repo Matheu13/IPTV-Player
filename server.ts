@@ -24,7 +24,10 @@ import { XmltvStreamParser } from './src/lib/xmltvStreamParser';
 import type { XmltvChannel } from './src/lib/models';
 import { matchChannelToXmltv, batchMatchChannelsToXmltv } from './src/lib/fuzzyEpgMatcher';
 import { runMilestone4TestSuite } from './scripts/milestone4_tests';
+import { runMilestone5TestSuite } from './scripts/milestone5_tests';
+import { runMilestones6To10TestSuite } from './scripts/milestones_6_to_10_tests';
 import { ChannelManager, RemoteZapperController } from './src/lib/channelManager';
+import { handleLiveStreamProxy, streamDirectMedia, rewriteM3u8Playlist } from './src/lib/streamProxy';
 import {
   FIXTURE_XMLTV_RAW,
   FIXTURE_XTREAM_EPG_TABLE,
@@ -518,6 +521,191 @@ async function startServer() {
     } catch (err: any) {
       res.status(500).json({ error: redact(err.message) });
     }
+  });
+
+  // 8. Live IPTV Source Ingestion Endpoint
+  app.post('/api/m1/sources/load-live', async (req, res) => {
+    try {
+      const { baseUrl, username, password, sourceName } = req.body || {};
+      const host = baseUrl || 'http://dnsjibre.xyz:80';
+      const user = username || 'B3GC9NESBU82M3W';
+      const pass = password || '2pFz3E7P3d';
+      const name = sourceName || 'Primary Xtream (dnsjibre.xyz)';
+      const sourceId = `src_${Buffer.from(host + user).toString('base64url').slice(0, 12)}`;
+
+      const client = new XtreamClient({
+        baseUrl: host,
+        username: user,
+        password: pass,
+      });
+
+      const catalog = await client.fetchFullCatalog();
+      
+      // Save source in SQLite
+      sqliteEpgDB.saveSource({
+        id: sourceId,
+        name,
+        sourceType: 'XTREAM',
+        baseUrl: host,
+        username: user,
+        status: catalog.account.authStatus,
+        maxConnections: catalog.account.maxConnections,
+        channelCount: catalog.channels.length,
+        categoryCount: catalog.categories.length,
+        lastRefreshedAt: Date.now(),
+        metadataJson: JSON.stringify({
+          expirationDate: catalog.account.expirationDate,
+          allowedFormats: catalog.account.allowedOutputFormats,
+        }),
+      });
+
+      // Save categories in SQLite
+      sqliteEpgDB.insertLiveCategories(
+        sourceId,
+        catalog.categories.map((c) => ({
+          id: String(c.id),
+          name: c.name,
+          parentId: typeof c.parentId === 'number' ? c.parentId : parseInt(String(c.parentId || 0), 10) || undefined,
+          channelCount: c.channelCount,
+        }))
+      );
+
+      // Save channels in SQLite
+      sqliteEpgDB.insertLiveChannelsBatch(sourceId, catalog.channels);
+
+      // Also cache in globalCacheManager for instant fallback & resilience
+      globalCacheManager.saveCatalog(`source_${sourceId}`, 'XTREAM', {
+        account: catalog.account,
+        categories: catalog.categories,
+        channels: catalog.channels,
+      });
+
+      res.json({
+        success: true,
+        sourceId,
+        sourceName: name,
+        account: redact(catalog.account),
+        totalCategories: catalog.categories.length,
+        totalChannels: catalog.channels.length,
+        warnings: catalog.warnings,
+        sampleChannels: catalog.channels.slice(0, 10).map((c) => redact(c)),
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: redact(err.message) });
+    }
+  });
+
+  // 9. Query Live Channels with Pagination & Search
+  app.get('/api/m1/channels/live', (req, res) => {
+    try {
+      const categoryId = req.query.category as string;
+      const search = req.query.search as string;
+      const page = Math.max(1, parseInt((req.query.page as string) || '1', 10));
+      const limit = Math.min(100, Math.max(1, parseInt((req.query.limit as string) || '50', 10)));
+      const offset = (page - 1) * limit;
+      const sourceId = req.query.sourceId as string;
+
+      const channels = sqliteEpgDB.getLiveChannels({
+        categoryId,
+        search,
+        limit,
+        offset,
+        sourceId,
+      });
+
+      const total = sqliteEpgDB.getLiveChannelsCount({
+        categoryId,
+        search,
+        sourceId,
+      });
+
+      res.json({
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        channels: channels.map((c) => ({
+          ...c,
+          id: c.stream_id,
+          streamId: c.stream_id,
+          categoryId: c.category_id,
+          categoryName: c.category_name,
+          streamIcon: c.stream_icon,
+          epgChannelId: c.epg_channel_id,
+          tvArchive: Boolean(c.tv_archive),
+          streamUrl: `/api/stream/live/${c.stream_id}.m3u8`,
+          tsStreamUrl: `/api/stream/live/${c.stream_id}.ts`,
+          rawStreamUrl: c.resolved_stream_url,
+          format: c.active_format || 'm3u8',
+          formatsAvailable: c.formats_json ? JSON.parse(c.formats_json) : ['m3u8', 'ts'],
+        })),
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: redact(err.message) });
+    }
+  });
+
+  // 10. Query Live Categories
+  app.get('/api/m1/sources/categories', (req, res) => {
+    try {
+      const sourceId = req.query.sourceId as string;
+      const categories = sqliteEpgDB.getLiveCategories(sourceId);
+      res.json({
+        count: categories.length,
+        categories: categories.map((c) => ({
+          id: c.id,
+          name: c.name,
+          channelCount: c.real_channel_count || c.channel_count,
+        })),
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: redact(err.message) });
+    }
+  });
+
+  // 11. Query Sources List
+  app.get('/api/m1/sources/list', (_req, res) => {
+    try {
+      const sources = sqliteEpgDB.getSources();
+      res.json({ count: sources.length, sources: redact(sources) });
+    } catch (err: any) {
+      res.status(500).json({ error: redact(err.message) });
+    }
+  });
+
+  // 12. Live Stream Proxy Endpoints (CORS & Mixed-Content Resolver)
+  app.get('/api/stream/live/:streamIdWithExt', async (req, res) => {
+    const rawParam = req.params.streamIdWithExt;
+    let streamId = rawParam;
+    let format: 'm3u8' | 'ts' = 'm3u8';
+
+    if (rawParam.endsWith('.m3u8')) {
+      streamId = rawParam.replace('.m3u8', '');
+      format = 'm3u8';
+    } else if (rawParam.endsWith('.ts')) {
+      streamId = rawParam.replace('.ts', '');
+      format = 'ts';
+    } else {
+      format = (req.query.format as 'm3u8' | 'ts') || 'm3u8';
+    }
+
+    await handleLiveStreamProxy(streamId, format, req, res);
+  });
+
+  app.get('/api/stream/segment', (req, res) => {
+    const targetUrl = req.query.url as string;
+    if (!targetUrl) {
+      return res.status(400).send('Missing url query parameter');
+    }
+    streamDirectMedia(targetUrl, req, res);
+  });
+
+  app.get('/api/stream/proxy', (req, res) => {
+    const targetUrl = req.query.url as string;
+    if (!targetUrl) {
+      return res.status(400).send('Missing url query parameter');
+    }
+    streamDirectMedia(targetUrl, req, res);
   });
 
   // ==========================================
@@ -1062,6 +1250,26 @@ async function startServer() {
     try {
       sqliteEpgDB.clearAllEpg();
       res.json({ success: true, stats: sqliteEpgDB.getStats() });
+    } catch (err: any) {
+      res.status(500).json({ error: redact(err.message) });
+    }
+  });
+
+  // Milestone 5 Test Suite Runner
+  app.get('/api/m5/test-suite', async (_req, res) => {
+    try {
+      const summary = await runMilestone5TestSuite();
+      res.json(summary);
+    } catch (err: any) {
+      res.status(500).json({ error: redact(err.message) });
+    }
+  });
+
+  // Milestones 6 to 10 Test Suite Runner
+  app.get('/api/m6-10/test-suite', async (_req, res) => {
+    try {
+      const summary = await runMilestones6To10TestSuite();
+      res.json(summary);
     } catch (err: any) {
       res.status(500).json({ error: redact(err.message) });
     }

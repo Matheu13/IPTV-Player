@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Hls from 'hls.js';
+import mpegts from 'mpegts.js';
 import {
   Play,
   Square,
@@ -107,19 +108,116 @@ const SAMPLE_CHANNELS = [
 ];
 
 export const LivePlayerSurface: React.FC = () => {
-  const [channels, setChannels] = useState(SAMPLE_CHANNELS);
+  const [channelMode, setChannelMode] = useState<'provider' | 'sample'>('provider');
+  const [channels, setChannels] = useState<any[]>(SAMPLE_CHANNELS);
+  const [liveChannels, setLiveChannels] = useState<any[]>([]);
+  const [categories, setCategories] = useState<{ id: string; name: string; channelCount: number }[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [page, setPage] = useState<number>(1);
+  const [totalPages, setTotalPages] = useState<number>(1);
+  const [totalLiveCount, setTotalLiveCount] = useState<number>(0);
+  const [isLoadingLive, setIsLoadingLive] = useState<boolean>(false);
+  const [isSyncingSource, setIsSyncingSource] = useState<boolean>(false);
+
   const [engineState, setEngineState] = useState<PlayerEngineState>(globalPlayerEngine.getState());
   const [mpvStats, setMpvStats] = useState<MpvPlaybackStats>(globalMpvBridge.getStats());
   const [mpvParams, setMpvParams] = useState<MpvVideoParams>(globalMpvBridge.getVideoParams());
   const [showStatsHud, setShowStatsHud] = useState(false);
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [showOsd, setShowOsd] = useState(true);
-  const [selectedChannel, setSelectedChannel] = useState(SAMPLE_CHANNELS[0]);
+  const [selectedChannel, setSelectedChannel] = useState<any>(SAMPLE_CHANNELS[0]);
   const [searchQuery, setSearchQuery] = useState('');
   const [osdTimeout, setOsdTimeout] = useState<any>(null);
+  const [activeFormat, setActiveFormat] = useState<'m3u8' | 'ts'>('m3u8');
+  const [playbackError, setPlaybackError] = useState<string | null>(null);
 
-  // Fetch real-time Now/Next EPG info from SQLite
+  // Fetch Live Categories on mount
   useEffect(() => {
+    fetch('/api/m1/sources/categories')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.categories && Array.isArray(data.categories)) {
+          setCategories(data.categories);
+        }
+      })
+      .catch((err) => console.error('Failed to load categories:', err));
+  }, []);
+
+  // Fetch Live Channels when category, search, or page changes
+  useEffect(() => {
+    if (channelMode !== 'provider') return;
+
+    setIsLoadingLive(true);
+    const params = new URLSearchParams();
+    if (selectedCategory !== 'all') params.append('category', selectedCategory);
+    if (searchQuery.trim()) params.append('search', searchQuery.trim());
+    params.append('page', String(page));
+    params.append('limit', '50');
+
+    fetch(`/api/m1/channels/live?${params.toString()}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.channels && Array.isArray(data.channels)) {
+          const mappedChannels = data.channels.map((c: any) => ({
+            id: c.streamId || c.stream_id,
+            streamId: c.streamId || c.stream_id,
+            name: c.name,
+            category: c.categoryName || c.category_name || 'General',
+            format: c.format || 'm3u8',
+            streamUrl: c.streamUrl || `/api/stream/live/${c.streamId || c.stream_id}.m3u8`,
+            tsStreamUrl: c.tsStreamUrl || `/api/stream/live/${c.streamId || c.stream_id}.ts`,
+            rawStreamUrl: c.rawStreamUrl || c.resolved_stream_url,
+            tvgId: c.epgChannelId || c.epg_channel_id || '',
+            currentShow: 'Live Broadcast',
+            nextShow: 'Upcoming Broadcast',
+            epgProgress: 50,
+            hasEpgData: true,
+          }));
+
+          setLiveChannels(mappedChannels);
+          setTotalPages(data.totalPages || 1);
+          setTotalLiveCount(data.total || 0);
+
+          if (mappedChannels.length > 0 && selectedChannel.id === SAMPLE_CHANNELS[0].id) {
+            setSelectedChannel(mappedChannels[0]);
+          }
+        }
+      })
+      .catch((err) => console.error('Failed to load live channels:', err))
+      .finally(() => setIsLoadingLive(false));
+  }, [channelMode, selectedCategory, searchQuery, page]);
+
+  // Sync Provider Source
+  const handleSyncSource = async () => {
+    setIsSyncingSource(true);
+    try {
+      const res = await fetch('/api/m1/sources/load-live', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          baseUrl: 'http://dnsjibre.xyz:80',
+          username: 'B3GC9NESBU82M3W',
+          password: '2pFz3E7P3d',
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        // Refresh categories
+        const catRes = await fetch('/api/m1/sources/categories');
+        const catData = await catRes.json();
+        if (catData.categories) setCategories(catData.categories);
+        setPage(1);
+      }
+    } catch (err) {
+      console.error('Failed to sync provider source:', err);
+    } finally {
+      setIsSyncingSource(false);
+    }
+  };
+
+  // Fetch real-time Now/Next EPG info from SQLite for demo channels
+  useEffect(() => {
+    if (channelMode !== 'sample') return;
     const fetchNowNext = async () => {
       try {
         const res = await fetch('/api/m4/epg/now-next', {
@@ -159,10 +257,11 @@ export const LivePlayerSurface: React.FC = () => {
     fetchNowNext();
     const interval = setInterval(fetchNowNext, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [channelMode]);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
+  const mpegtsRef = useRef<any>(null);
   const playerContainerRef = useRef<HTMLDivElement>(null);
 
   // Sync engine updates
@@ -175,38 +274,109 @@ export const LivePlayerSurface: React.FC = () => {
     return () => unsub();
   }, []);
 
-  // Handle HLS / Video Attachment
+  // Handle HLS / MPEG-TS / Video Attachment
   useEffect(() => {
     if (!videoRef.current) return;
 
-    if (engineState.isPlaying && selectedChannel.streamUrl) {
-      const isHls = selectedChannel.streamUrl.includes('.m3u8');
+    // Destroy existing instances
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+    if (mpegtsRef.current) {
+      mpegtsRef.current.destroy();
+      mpegtsRef.current = null;
+    }
 
-      if (isHls && Hls.isSupported()) {
-        if (hlsRef.current) {
-          hlsRef.current.destroy();
+    if (engineState.isPlaying && selectedChannel) {
+      setPlaybackError(null);
+      const urlToPlay =
+        activeFormat === 'ts' && selectedChannel.tsStreamUrl
+          ? selectedChannel.tsStreamUrl
+          : selectedChannel.streamUrl;
+
+      const isMpegTs = urlToPlay.endsWith('.ts') || activeFormat === 'ts';
+      const isHls = urlToPlay.includes('.m3u8') || activeFormat === 'm3u8';
+
+      if (isMpegTs && mpegts.isSupported()) {
+        try {
+          const player = mpegts.createPlayer(
+            {
+              type: 'mse',
+              isLive: true,
+              url: urlToPlay,
+            },
+            {
+              enableWorker: true,
+              lazyLoad: false,
+              liveBufferLatencyChasing: true,
+            }
+          );
+          player.attachMediaElement(videoRef.current);
+          player.load();
+          const playPromise = player.play();
+          if (playPromise && typeof playPromise.catch === 'function') {
+            playPromise.catch((err: any) => {
+              console.warn('MPEG-TS play promise error:', err);
+            });
+          }
+          player.on(mpegts.Events.ERROR, (errorType: any, errorDetail: any) => {
+            console.warn('[MPEG-TS Player Error]', errorType, errorDetail);
+            setPlaybackError(`MPEG-TS Error: ${errorDetail}`);
+          });
+          mpegtsRef.current = player;
+        } catch (err: any) {
+          console.error('MPEG-TS init failed:', err);
+          setPlaybackError(`Failed to initialize MPEG-TS player: ${err.message}`);
         }
+      } else if (isHls && Hls.isSupported()) {
         const hls = new Hls({
           enableWorker: true,
           lowLatencyMode: true,
-          backBufferLength: 90,
+          backBufferLength: 60,
+          manifestLoadingTimeOut: 12000,
+          manifestLoadingMaxRetry: 3,
+          levelLoadingTimeOut: 12000,
+          fragLoadingTimeOut: 15000,
+          fragLoadingMaxRetry: 3,
         });
-        hls.loadSource(selectedChannel.streamUrl);
+
+        hls.loadSource(urlToPlay);
         hls.attachMedia(videoRef.current);
+
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          setPlaybackError(null);
           videoRef.current?.play().catch(() => {});
         });
+
+        hls.on(Hls.Events.ERROR, (event, data) => {
+          if (data.fatal) {
+            console.warn('[HLS Fatal Error]', data.type, data.details);
+            switch (data.type) {
+              case Hls.ErrorTypes.NETWORK_ERROR:
+                console.warn('Fatal network error encountered, reloading stream...');
+                hls.startLoad();
+                break;
+              case Hls.ErrorTypes.MEDIA_ERROR:
+                console.warn('Fatal media error encountered, recovering...');
+                hls.recoverMediaError();
+                break;
+              default:
+                console.error('Unrecoverable HLS error encountered:', data.details);
+                setPlaybackError(`Stream connection issue: ${data.details}. Try switching to TS mode.`);
+                hls.destroy();
+                break;
+            }
+          }
+        });
+
         hlsRef.current = hls;
       } else {
-        // Native fallback (MP4 / direct video)
-        videoRef.current.src = selectedChannel.streamUrl;
+        // Native fallback (Safari HLS or MP4)
+        videoRef.current.src = urlToPlay;
         videoRef.current.play().catch(() => {});
       }
     } else {
-      if (hlsRef.current) {
-        hlsRef.current.destroy();
-        hlsRef.current = null;
-      }
       if (videoRef.current) {
         videoRef.current.pause();
         videoRef.current.removeAttribute('src');
@@ -219,8 +389,12 @@ export const LivePlayerSurface: React.FC = () => {
         hlsRef.current.destroy();
         hlsRef.current = null;
       }
+      if (mpegtsRef.current) {
+        mpegtsRef.current.destroy();
+        mpegtsRef.current = null;
+      }
     };
-  }, [engineState.isPlaying, selectedChannel]);
+  }, [engineState.isPlaying, selectedChannel, activeFormat]);
 
   // Trigger OSD visibility on mouse move or channel switch
   const triggerOsd = () => {
@@ -230,13 +404,16 @@ export const LivePlayerSurface: React.FC = () => {
     setOsdTimeout(t);
   };
 
-  const handlePlayChannel = (ch: typeof SAMPLE_CHANNELS[0]) => {
+  const handlePlayChannel = (ch: any) => {
     setSelectedChannel(ch);
+    const targetStreamUrl =
+      activeFormat === 'ts' && ch.tsStreamUrl ? ch.tsStreamUrl : ch.streamUrl;
+
     globalPlayerEngine.loadChannel({
       id: ch.id,
       name: ch.name,
-      streamUrl: ch.streamUrl,
-      format: ch.format,
+      streamUrl: targetStreamUrl,
+      format: activeFormat,
     });
     triggerOsd();
   };
@@ -370,10 +547,37 @@ export const LivePlayerSurface: React.FC = () => {
 
           {/* Buffering / Stalling Overlay */}
           {engineState.isBuffering && engineState.isPlaying && (
-            <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-3">
+            <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-3 z-30">
               <RefreshCw className="w-8 h-8 text-indigo-400 animate-spin" />
               <div className="text-xs font-mono text-indigo-300 font-semibold bg-black/80 px-3 py-1 rounded border border-indigo-900">
                 {engineState.isStalled ? 'Buffer Starvation — Auto-Recovering...' : 'Buffering Stream...'}
+              </div>
+            </div>
+          )}
+
+          {/* Playback Error Banner with Format Switch Helper */}
+          {playbackError && engineState.isPlaying && (
+            <div className="absolute inset-x-4 top-20 bg-rose-950/90 border border-rose-700/80 backdrop-blur rounded-lg p-3 text-xs text-rose-200 z-30 shadow-xl flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                <span className="truncate">{playbackError}</span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {activeFormat === 'm3u8' ? (
+                  <button
+                    onClick={() => setActiveFormat('ts')}
+                    className="px-2.5 py-1 rounded bg-rose-700 hover:bg-rose-600 text-white font-mono text-[11px] font-semibold transition cursor-pointer"
+                  >
+                    Switch to MPEG-TS (.ts)
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setActiveFormat('m3u8')}
+                    className="px-2.5 py-1 rounded bg-rose-700 hover:bg-rose-600 text-white font-mono text-[11px] font-semibold transition cursor-pointer"
+                  >
+                    Switch to HLS (.m3u8)
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -494,9 +698,34 @@ export const LivePlayerSurface: React.FC = () => {
                 />
               </div>
 
-              {/* Live Badge */}
+              {/* Live Badge & Format Switcher */}
               <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-rose-950/80 border border-rose-800 text-[10px] font-mono text-rose-300 font-bold uppercase">
                 <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" /> LIVE
+              </div>
+
+              <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-0.5 text-[11px] font-mono">
+                <button
+                  onClick={() => setActiveFormat('m3u8')}
+                  className={`px-2 py-0.5 rounded transition cursor-pointer ${
+                    activeFormat === 'm3u8'
+                      ? 'bg-indigo-600 text-white font-bold'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                  title="Play HLS (Adaptive Segmented Stream)"
+                >
+                  HLS
+                </button>
+                <button
+                  onClick={() => setActiveFormat('ts')}
+                  className={`px-2 py-0.5 rounded transition cursor-pointer ${
+                    activeFormat === 'ts'
+                      ? 'bg-indigo-600 text-white font-bold'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                  title="Play MPEG-TS (Continuous Demuxed Stream)"
+                >
+                  TS
+                </button>
               </div>
             </div>
 
@@ -526,85 +755,188 @@ export const LivePlayerSurface: React.FC = () => {
               <Tv className="w-4 h-4 text-indigo-400" />
               <h3 className="text-sm font-semibold text-slate-100">Live Channel Switcher</h3>
             </div>
-            <span className="text-[10px] font-mono bg-slate-800 text-slate-400 px-2 py-0.5 rounded">
-              {filteredChannels.length} Streams
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-mono bg-indigo-950/80 text-indigo-300 border border-indigo-800 px-2 py-0.5 rounded font-bold">
+                {channelMode === 'provider' ? `${totalLiveCount.toLocaleString()} Streams` : `${channels.length} Demo Streams`}
+              </span>
+              <button
+                onClick={handleSyncSource}
+                disabled={isSyncingSource}
+                title="Sync / Reload Channels from Provider"
+                className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncingSource ? 'animate-spin text-indigo-400' : ''}`} />
+              </button>
+            </div>
           </div>
 
-          {/* Search Box */}
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-500" />
-            <input
-              type="text"
-              placeholder="Search live channels..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
-            />
+          {/* Mode Switcher Tabs */}
+          <div className="grid grid-cols-2 gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs">
+            <button
+              onClick={() => {
+                setChannelMode('provider');
+                setPage(1);
+              }}
+              className={`py-1 rounded font-semibold transition text-center ${
+                channelMode === 'provider'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              Provider Lineup ({totalLiveCount > 0 ? `${(totalLiveCount / 1000).toFixed(1)}k` : '26.8k'})
+            </button>
+            <button
+              onClick={() => setChannelMode('sample')}
+              className={`py-1 rounded font-semibold transition text-center ${
+                channelMode === 'sample'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              Sample Demo (5)
+            </button>
           </div>
+
+          {/* Category Dropdown & Search (When in Provider Mode) */}
+          {channelMode === 'provider' && (
+            <div className="space-y-2">
+              <select
+                value={selectedCategory}
+                onChange={(e) => {
+                  setSelectedCategory(e.target.value);
+                  setPage(1);
+                }}
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 truncate"
+              >
+                <option value="all">📁 All Categories (376 Categories)</option>
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name} ({cat.channelCount || 0})
+                  </option>
+                ))}
+              </select>
+
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-500" />
+                <input
+                  type="text"
+                  placeholder="Search 26k+ live channels..."
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setPage(1);
+                  }}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+            </div>
+          )}
+
+          {channelMode === 'sample' && (
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-500" />
+              <input
+                type="text"
+                placeholder="Search demo channels..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+          )}
 
           {/* Channels List */}
-          <div className="space-y-2 overflow-y-auto max-h-[340px] pr-1 scrollbar-thin">
-            {filteredChannels.map((ch) => {
-              const isSelected = selectedChannel.id === ch.id;
-              const isLivePlaying = isSelected && engineState.isPlaying;
+          <div className="space-y-2 overflow-y-auto max-h-[320px] pr-1 scrollbar-thin">
+            {isLoadingLive ? (
+              <div className="py-12 flex flex-col items-center justify-center space-y-2 text-slate-400">
+                <RefreshCw className="w-5 h-5 animate-spin text-indigo-400" />
+                <span className="text-xs">Loading live channels...</span>
+              </div>
+            ) : (channelMode === 'provider' ? liveChannels : channels.filter((c) =>
+                c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                c.category.toLowerCase().includes(searchQuery.toLowerCase())
+              )).length === 0 ? (
+              <div className="py-8 text-center text-xs text-slate-500">
+                No channels found matching the filter.
+              </div>
+            ) : (
+              (channelMode === 'provider'
+                ? liveChannels
+                : channels.filter((c) =>
+                    c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    c.category.toLowerCase().includes(searchQuery.toLowerCase())
+                  )
+              ).map((ch) => {
+                const isSelected = selectedChannel.id === ch.id;
+                const isLivePlaying = isSelected && engineState.isPlaying;
 
-              return (
-                <button
-                  key={ch.id}
-                  onClick={() => handlePlayChannel(ch)}
-                  className={`w-full p-3 rounded-lg border text-left transition flex items-center justify-between cursor-pointer ${
-                    isLivePlaying
-                      ? 'bg-indigo-950/60 border-indigo-500 text-indigo-200 shadow-md shadow-indigo-950/50'
-                      : isSelected
-                      ? 'bg-slate-800/80 border-slate-700 text-slate-200'
-                      : 'bg-slate-950/70 border-slate-800/80 text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
-                  }`}
-                >
-                  <div className="space-y-1.5 truncate pr-2 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-[10px] bg-slate-800 text-indigo-300 px-1.5 py-0.5 rounded font-bold">
-                        #{ch.id}
+                return (
+                  <button
+                    key={ch.id}
+                    onClick={() => handlePlayChannel(ch)}
+                    className={`w-full p-3 rounded-lg border text-left transition flex items-center justify-between cursor-pointer ${
+                      isLivePlaying
+                        ? 'bg-indigo-950/60 border-indigo-500 text-indigo-200 shadow-md shadow-indigo-950/50'
+                        : isSelected
+                        ? 'bg-slate-800/80 border-slate-700 text-slate-200'
+                        : 'bg-slate-950/70 border-slate-800/80 text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
+                    }`}
+                  >
+                    <div className="space-y-1 truncate pr-2 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[10px] bg-slate-800 text-indigo-300 px-1.5 py-0.5 rounded font-bold">
+                          #{ch.id}
+                        </span>
+                        <span className="text-xs font-semibold truncate text-slate-100">{ch.name}</span>
+                      </div>
+                      <div className="text-[10px] text-slate-400 font-medium truncate flex items-center gap-1.5">
+                        <span className="text-slate-500 font-mono text-[9px]">CAT:</span>
+                        <span className="truncate">{ch.category}</span>
+                      </div>
+                      <div className="text-[11px] text-slate-300 font-medium truncate flex items-center gap-1.5">
+                        <span className="text-indigo-400 font-bold text-[9px] font-mono">NOW:</span>
+                        <span className="truncate">{ch.currentShow || 'Live Broadcast'}</span>
+                      </div>
+                    </div>
+
+                    <div className="shrink-0 flex flex-col items-end gap-1.5 pl-2">
+                      <span className="text-[10px] font-mono bg-slate-900 text-slate-400 px-1.5 py-0.5 rounded border border-slate-800">
+                        .{ch.format || 'm3u8'}
                       </span>
-                      <span className="text-xs font-semibold truncate text-slate-100">{ch.name}</span>
-                      {ch.hasEpgData === false && (
-                        <span className="text-[9px] font-mono bg-amber-950/80 text-amber-400 border border-amber-800/80 px-1.5 py-0.2 rounded">
-                          Unmatched
+                      {isLivePlaying && (
+                        <span className="text-[10px] font-semibold text-emerald-400 flex items-center gap-1 font-mono bg-emerald-950/70 border border-emerald-800 px-1.5 py-0.5 rounded">
+                          <Activity className="w-3 h-3 animate-pulse" /> ON AIR
                         </span>
                       )}
                     </div>
-                    <div className="text-[11px] text-slate-300 font-medium truncate flex items-center gap-1.5">
-                      <span className="text-indigo-400 font-bold text-[9px] font-mono">NOW:</span>
-                      <span className="truncate">{ch.currentShow}</span>
-                    </div>
-                    {ch.hasEpgData && (
-                      <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
-                        <div
-                          className="bg-indigo-500 h-full rounded-full transition-all"
-                          style={{ width: `${ch.epgProgress}%` }}
-                        />
-                      </div>
-                    )}
-                    <div className="text-[10px] text-slate-500 truncate flex items-center gap-1.5">
-                      <span className="text-slate-400 font-semibold text-[9px] font-mono">NEXT:</span>
-                      <span className="truncate">{ch.nextShow}</span>
-                    </div>
-                  </div>
-
-                  <div className="shrink-0 flex flex-col items-end gap-1.5 pl-2">
-                    <span className="text-[10px] font-mono bg-slate-900 text-slate-400 px-1.5 py-0.5 rounded border border-slate-800">
-                      .{ch.format}
-                    </span>
-                    {isLivePlaying && (
-                      <span className="text-[10px] font-semibold text-emerald-400 flex items-center gap-1 font-mono bg-emerald-950/70 border border-emerald-800 px-1.5 py-0.5 rounded">
-                        <Activity className="w-3 h-3 animate-pulse" /> ON AIR
-                      </span>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
+                  </button>
+                );
+              })
+            )}
           </div>
+
+          {/* Pagination Controls for Provider Mode */}
+          {channelMode === 'provider' && totalPages > 1 && (
+            <div className="flex items-center justify-between pt-2 border-t border-slate-800 text-xs">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-40 transition cursor-pointer"
+              >
+                Previous
+              </button>
+              <span className="text-slate-400 font-mono text-[11px]">
+                Page {page} of {totalPages}
+              </span>
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+                className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-40 transition cursor-pointer"
+              >
+                Next
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

@@ -282,7 +282,7 @@ export async function runMilestone2TestSuite(): Promise<{
 }
 
 // CLI Execution Support
-if (process.argv[1]?.endsWith('milestone2_tests.ts')) {
+if (typeof process !== 'undefined' && Array.isArray(process.argv) && process.argv[1]?.endsWith('milestone2_tests.ts')) {
   runMilestone2TestSuite().then((summary) => {
     console.log('\n================== MILESTONE 2 AUTOMATED TEST SUITE ==================');
     console.log(`Total Assertions: ${summary.total} | Passed: ${summary.passed} | Failed: ${summary.failed}`);

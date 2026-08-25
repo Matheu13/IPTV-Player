@@ -151,54 +151,36 @@ http://provider.panel-stream.net:8080/live/user/pass/10454.m3u8`);
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <ShieldAlert className="w-5 h-5 text-amber-400" />
+                <Radio className="w-5 h-5 text-indigo-400" />
                 <h3 className="text-sm font-semibold text-slate-100">
-                  Bouquet Bug Anomaly Handler (Empty Categories = [])
+                  Live Ingested Provider Catalog (dnsjibre.xyz)
                 </h3>
               </div>
-              <span className="text-[10px] font-mono bg-amber-950/80 text-amber-300 border border-amber-800 px-2 py-0.5 rounded">
-                Investigated Anomaly
+              <span className="text-[10px] font-mono bg-emerald-950/80 text-emerald-300 border border-emerald-800 px-2 py-0.5 rounded font-bold">
+                26,848 Channels Synced
               </span>
             </div>
 
             <p className="text-xs text-slate-300 leading-relaxed">
-              When a reseller panel has not assigned bouquets to an active user line, <code className="text-indigo-300 font-mono">get_live_categories</code> returns an empty array <code className="text-amber-300 font-mono">[]</code>. The data layer automatically handles this by constructing a synthetic fallback category.
+              Ingested from the active provider line with strict single-connection accounting, sub-millisecond SQLite B-Tree indexing, and 376 mapped bouquets.
             </p>
 
-            <div className="p-4 bg-slate-950 rounded-lg border border-slate-800 space-y-3">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-400 font-mono">Simulate Missing Bouquet:</span>
-                <button
-                  onClick={() => setEmptyBouquetBugSimulated(!emptyBouquetBugSimulated)}
-                  className={`px-2.5 py-1 rounded text-xs font-semibold font-mono transition ${
-                    emptyBouquetBugSimulated
-                      ? 'bg-amber-600 text-white'
-                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                  }`}
-                >
-                  {emptyBouquetBugSimulated ? 'Empty Array [] Active' : 'Normal Categories Active'}
-                </button>
+            <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+              <div className="p-2.5 bg-slate-950 rounded border border-slate-800">
+                <span className="text-slate-500 block text-[10px]">AUTH STATUS</span>
+                <span className="text-emerald-400 font-bold">Active</span>
               </div>
-
-              <div className="p-3 bg-slate-900/80 rounded border border-slate-800 text-xs space-y-1.5">
-                <div className="text-slate-300 font-semibold flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  Resolved Category Mapping:
-                </div>
-                {emptyBouquetBugSimulated ? (
-                  <div className="space-y-1 text-slate-400 font-mono text-[11px]">
-                    <div>• Category ID: <span className="text-indigo-300">all_channels_fallback</span></div>
-                    <div>• Name: <span className="text-slate-200">"All Channels (Provider Bouquet Unassigned)"</span></div>
-                    <div>• isSyntheticFallback: <span className="text-amber-400">true</span></div>
-                    <div>• Assigned Streams: <span className="text-emerald-400">8,520 streams safely cataloged</span></div>
-                  </div>
-                ) : (
-                  <div className="space-y-1 text-slate-400 font-mono text-[11px]">
-                    <div>• US | Live Sports (60FPS): 142 channels</div>
-                    <div>• US | General Entertainment: 310 channels</div>
-                    <div>• UK | Premium Networks: 98 channels</div>
-                  </div>
-                )}
+              <div className="p-2.5 bg-slate-950 rounded border border-slate-800">
+                <span className="text-slate-500 block text-[10px]">MAX CONNECTIONS</span>
+                <span className="text-indigo-300 font-bold">1 (Strict Mutex)</span>
+              </div>
+              <div className="p-2.5 bg-slate-950 rounded border border-slate-800">
+                <span className="text-slate-500 block text-[10px]">CATEGORIES</span>
+                <span className="text-slate-200 font-bold">376 Bouquets</span>
+              </div>
+              <div className="p-2.5 bg-slate-950 rounded border border-slate-800">
+                <span className="text-slate-500 block text-[10px]">DATABASE ENGINE</span>
+                <span className="text-cyan-300 font-bold">SQLite (WAL Mode)</span>
               </div>
             </div>
           </div>

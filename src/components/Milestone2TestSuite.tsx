@@ -1,6 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { CheckCircle2, XCircle, Play, RefreshCw, ShieldCheck, Layers, Cpu } from 'lucide-react';
-import { Milestone2TestResult } from '../../scripts/milestone2_tests';
+export interface Milestone2TestResult {
+  testId: string;
+  name: string;
+  category: string;
+  passed: boolean;
+  durationMs: number;
+  assertionMessage?: string;
+  error?: string;
+}
 
 export const Milestone2TestSuite: React.FC = () => {
   const [loading, setLoading] = useState(false);

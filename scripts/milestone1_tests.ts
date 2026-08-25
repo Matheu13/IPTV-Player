@@ -323,7 +323,7 @@ http://provider.panel:8080/live/u/p/102.m3u8`;
 }
 
 // If run via CLI: tsx scripts/milestone1_tests.ts
-if (process.argv[1]?.endsWith('milestone1_tests.ts')) {
+if (typeof process !== 'undefined' && Array.isArray(process.argv) && process.argv[1]?.endsWith('milestone1_tests.ts')) {
   runMilestone1TestSuite().then((summary) => {
     console.log('\n================== MILESTONE 1 AUTOMATED TEST SUITE ==================');
     console.log(`Total Assertions: ${summary.total} | Passed: ${summary.passed} | Failed: ${summary.failed}`);

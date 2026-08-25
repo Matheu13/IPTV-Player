@@ -414,7 +414,7 @@ export async function runMilestone3TestSuite(): Promise<{ total: number; passed:
 }
 
 // Direct CLI execution
-if (process.argv[1]?.endsWith('milestone3_tests.ts')) {
+if (typeof process !== 'undefined' && Array.isArray(process.argv) && process.argv[1]?.endsWith('milestone3_tests.ts')) {
   runMilestone3TestSuite().catch((err) => {
     console.error(err);
     process.exit(1);

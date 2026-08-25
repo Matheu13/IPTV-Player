@@ -22,6 +22,12 @@ import { ChannelManagementZapper } from './components/ChannelManagementZapper';
 import { Milestone3TestSuite } from './components/Milestone3TestSuite';
 import { EpgStreamSurface } from './components/EpgStreamSurface';
 import { Milestone4TestSuite } from './components/Milestone4TestSuite';
+import { AndroidTvLeanbackSurface } from './components/AndroidTvLeanbackSurface';
+import { Milestone5TestSuite } from './components/Milestone5TestSuite';
+import { Milestones6to10TestSuite } from './components/Milestones6to10TestSuite';
+import { StalkerPortalManager } from './components/StalkerPortalManager';
+import { AdvancedDiagnosticsPanel } from './components/AdvancedDiagnosticsPanel';
+import { MultiSourceMatrixView } from './components/MultiSourceMatrixView';
 import { globalPlayerEngine } from './lib/playerEngine';
 import {
   Activity,
@@ -48,6 +54,12 @@ import {
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<
+    | 'm6-10-test-suite'
+    | 'stalker-portal'
+    | 'advanced-diagnostics'
+    | 'multi-source'
+    | 'android-tv'
+    | 'm5-test-suite'
     | 'live-player'
     | 'epg-stream'
     | 'm4-test-suite'
@@ -70,7 +82,7 @@ export default function App() {
     | 'fixtures'
     | 'logs'
     | 'architecture'
-  >('live-player');
+  >('m6-10-test-suite');
 
   const [report, setReport] = useState<Milestone0DiagnosticReport | null>(null);
 
@@ -91,13 +103,22 @@ export default function App() {
     setActiveTab('report');
   };
 
-  const handleTuneChannelFromEpgOrRemote = (channelId: string | number, name: string) => {
-    const streamUrl = `http://provider.panel-stream.net:8080/live/user1/pass1/${channelId}.m3u8`;
+  const handleTuneChannelFromEpgOrRemote = (channelIdOrObj: any, maybeName?: string) => {
+    const channelId = typeof channelIdOrObj === 'object' && channelIdOrObj !== null
+      ? (channelIdOrObj.id ?? channelIdOrObj.streamId ?? '101')
+      : channelIdOrObj;
+    const name = typeof channelIdOrObj === 'object' && channelIdOrObj !== null
+      ? (channelIdOrObj.name ?? maybeName ?? 'Channel')
+      : (maybeName ?? 'Channel');
+    const streamUrl = typeof channelIdOrObj === 'object' && channelIdOrObj?.streamUrl
+      ? channelIdOrObj.streamUrl
+      : `http://provider.panel-stream.net:8080/live/user1/pass1/${channelId}.m3u8`;
+
     globalPlayerEngine.loadChannel({
       id: channelId,
       name,
       streamUrl,
-      format: 'm3u8',
+      format: streamUrl.includes('.m3u8') ? 'm3u8' : 'ts',
     });
     setActiveTab('live-player');
   };
@@ -125,10 +146,10 @@ export default function App() {
               <div className="flex items-center gap-2">
                 <h1 className="font-bold text-slate-100 text-base tracking-tight">IPTV Player &amp; Video Suite</h1>
                 <span className="text-[10px] font-mono font-semibold bg-indigo-950 text-indigo-300 border border-indigo-800 px-2 py-0.5 rounded-full">
-                  Milestones 0, 1, 2 &amp; 3 Active
+                  Milestones 0 — 10 Complete
                 </span>
               </div>
-              <p className="text-xs text-slate-400">Live Video • EPG 2D Grid • Catchup Timeshift • VOD &amp; Series • Remote Zapper</p>
+              <p className="text-xs text-slate-400">Multi-Source Matrix • Stalker/MAG • 8K/HDR Decoders • VPN Diagnostics • TV 10-Foot UX</p>
             </div>
           </div>
 
@@ -150,6 +171,85 @@ export default function App() {
 
         {/* Tab Navigation */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex space-x-1 overflow-x-auto pb-1 text-xs font-medium scrollbar-thin">
+          {/* Milestones 6 - 10 Primary Tabs */}
+          <button
+            id="tab-m6-10-test-suite"
+            onClick={() => setActiveTab('m6-10-test-suite')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'm6-10-test-suite'
+                ? 'border-cyan-500 bg-slate-800 text-cyan-300 font-semibold shadow-inner'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4 text-cyan-400" /> M6-10 Test Suite (11)
+          </button>
+
+          <button
+            id="tab-multi-source"
+            onClick={() => setActiveTab('multi-source')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'multi-source'
+                ? 'border-cyan-500 bg-slate-800 text-cyan-300 font-semibold'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Cpu className="w-4 h-4 text-cyan-400" /> M9: Multi-Source Matrix
+          </button>
+
+          <button
+            id="tab-stalker-portal"
+            onClick={() => setActiveTab('stalker-portal')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'stalker-portal'
+                ? 'border-purple-500 bg-slate-800 text-purple-300 font-semibold'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Tv className="w-4 h-4 text-purple-400" /> M7: Stalker / MAG Adapter
+          </button>
+
+          <button
+            id="tab-advanced-diagnostics"
+            onClick={() => setActiveTab('advanced-diagnostics')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'advanced-diagnostics'
+                ? 'border-amber-500 bg-slate-800 text-amber-300 font-semibold'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Activity className="w-4 h-4 text-amber-400" /> M8: Decoders &amp; VPN Probe
+          </button>
+
+          {/* Divider */}
+          <div className="h-5 w-px bg-slate-800 self-center mx-1" />
+          {/* Milestone 5 Android TV & Fire TV UX Primary Tabs */}
+          <button
+            id="tab-android-tv"
+            onClick={() => setActiveTab('android-tv')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'android-tv'
+                ? 'border-indigo-500 bg-slate-800 text-indigo-300 font-semibold shadow-inner'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Tv className="w-4 h-4 text-indigo-400" /> M5: Android TV / Fire TV UX
+          </button>
+
+          <button
+            id="tab-m5-test-suite"
+            onClick={() => setActiveTab('m5-test-suite')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'm5-test-suite'
+                ? 'border-emerald-500 bg-slate-800 text-emerald-300 font-semibold'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4 text-emerald-400" /> M5 Test Suite (12)
+          </button>
+
+          {/* Divider */}
+          <div className="h-5 w-px bg-slate-800 self-center mx-1" />
+
           {/* Milestone 4 Streaming XMLTV & SQLite EPG Primary Tabs */}
           <button
             id="tab-epg-stream"
@@ -435,6 +535,20 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full">
+        {/* Milestones 6 - 10 Views */}
+        {activeTab === 'm6-10-test-suite' && <Milestones6to10TestSuite />}
+        {activeTab === 'multi-source' && (
+          <MultiSourceMatrixView onPlayChannel={handleTuneChannelFromEpgOrRemote} />
+        )}
+        {activeTab === 'stalker-portal' && (
+          <StalkerPortalManager onPlayStream={handlePlayMediaFromVodOrCatchup} />
+        )}
+        {activeTab === 'advanced-diagnostics' && <AdvancedDiagnosticsPanel />}
+
+        {/* Milestone 5 Views */}
+        {activeTab === 'android-tv' && <AndroidTvLeanbackSurface />}
+        {activeTab === 'm5-test-suite' && <Milestone5TestSuite />}
+
         {/* Milestone 4 Views */}
         {activeTab === 'epg-stream' && (
           <EpgStreamSurface onTuneChannel={handleTuneChannelFromEpgOrRemote} />
