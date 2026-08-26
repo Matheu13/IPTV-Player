@@ -156,6 +156,69 @@ export class MultiSourceOrchestrator {
       .map(([_, ch]) => ch);
   }
 
+  public addOrUpdateM3USource(
+    sourceId: string,
+    name: string,
+    channelCount: number,
+    maxConnections = 1,
+    url?: string
+  ): UnifiedSourceState {
+    const existing = this.sources.get(sourceId);
+    const updated: UnifiedSourceState = {
+      sourceId,
+      sourceType: 'M3U',
+      name: name || (existing?.name ?? `M3U Playlist (${sourceId})`),
+      enabled: true,
+      status: 'ONLINE',
+      channelCount,
+      lastSyncedAt: Date.now(),
+      maxConcurrentConnections: maxConnections,
+      activeConnections: existing?.activeConnections ?? 0,
+      errorMessage: undefined,
+    };
+    this.sources.set(sourceId, updated);
+    return updated;
+  }
+
+  public clearSourceChannels(sourceId: string): void {
+    const keysToDelete: string[] = [];
+    for (const [key, ch] of this.unifiedChannels.entries()) {
+      if (ch.sourceId === sourceId) {
+        keysToDelete.push(key);
+      }
+    }
+    for (const key of keysToDelete) {
+      this.unifiedChannels.delete(key);
+    }
+  }
+
+  public removeSource(sourceId: string): boolean {
+    this.clearSourceChannels(sourceId);
+    return this.sources.delete(sourceId);
+  }
+
+  public ingestChannelsBatch(sourceId: string, channels: ChannelItem[]): number {
+    const src = this.sources.get(sourceId);
+    if (!src) return 0;
+
+    for (const ch of channels) {
+      const compositeKey = `${sourceId}:${ch.id}`;
+      this.unifiedChannels.set(compositeKey, {
+        ...ch,
+        sourceId,
+        sourceType: src.sourceType,
+      });
+    }
+
+    src.channelCount = Array.from(this.unifiedChannels.values()).filter(
+      (c) => c.sourceId === sourceId
+    ).length;
+    src.lastSyncedAt = Date.now();
+    src.status = 'ONLINE';
+
+    return src.channelCount;
+  }
+
   public checkCanTune(sourceId: string): { allowed: boolean; reason?: string } {
     const src = this.sources.get(sourceId);
     if (!src) return { allowed: false, reason: 'Source does not exist' };

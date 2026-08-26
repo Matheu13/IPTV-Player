@@ -128,6 +128,11 @@ export function redact<T>(input: T): T {
       return `${key}=${partialRedact(val)}`;
     });
 
+    // 4. Replace MAC addresses (e.g. 00:1A:79:B8:21:44 -> 00:1A:79:XX:XX:XX)
+    redactedText = redactedText.replace(/([0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2})[:-]([0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2})/g, (_m, prefix, suffix) => {
+      return `${prefix}:XX:XX:XX`;
+    });
+
     return redactedText as unknown as T;
   }
 

@@ -25,6 +25,28 @@ import { Milestone4TestSuite } from './components/Milestone4TestSuite';
 import { AndroidTvLeanbackSurface } from './components/AndroidTvLeanbackSurface';
 import { Milestone5TestSuite } from './components/Milestone5TestSuite';
 import { Milestones6to10TestSuite } from './components/Milestones6to10TestSuite';
+import { Milestones11to14TestSuite } from './components/Milestones11to14TestSuite';
+import { Milestones16to18TestSuite } from './components/Milestones16to18TestSuite';
+import { Milestones19to20TestSuite } from './components/Milestones19to20TestSuite';
+import { StalkerPortalSurface } from './components/StalkerPortalSurface';
+import { LeanbackSpatialSurface } from './components/LeanbackSpatialSurface';
+import { Milestones21to23TestSuite } from './components/Milestones21to23TestSuite';
+import { UltraLowLatencySurface } from './components/UltraLowLatencySurface';
+import { AiSportsHighlightsSurface } from './components/AiSportsHighlightsSurface';
+import { P2pCdnMeshSurface } from './components/P2pCdnMeshSurface';
+import { Milestones24to26TestSuite } from './components/Milestones24to26TestSuite';
+import { Scte35DaiSurface } from './components/Scte35DaiSurface';
+import { MultiRoomCastSurface } from './components/MultiRoomCastSurface';
+import { HybridRfTunerSurface } from './components/HybridRfTunerSurface';
+import { Milestone27TestSuite } from './components/Milestone27TestSuite';
+import { ForensicWatermarkSurface } from './components/ForensicWatermarkSurface';
+import { MultiViewSurface } from './components/MultiViewSurface';
+import { OfflineDownloadVault } from './components/OfflineDownloadVault';
+import { ChannelHealthWatchdogSurface } from './components/ChannelHealthWatchdogSurface';
+import { AudioSubtitleEngineSurface } from './components/AudioSubtitleEngineSurface';
+import { PvrRecordingManager } from './components/PvrRecordingManager';
+import { AbrQosMonitor } from './components/AbrQosMonitor';
+import { ParentalControlVault } from './components/ParentalControlVault';
 import { StalkerPortalManager } from './components/StalkerPortalManager';
 import { AdvancedDiagnosticsPanel } from './components/AdvancedDiagnosticsPanel';
 import { MultiSourceMatrixView } from './components/MultiSourceMatrixView';
@@ -50,10 +72,36 @@ import {
   Film,
   Gamepad2,
   Heart,
+  Volume2,
+  Tag,
+  Cast,
+  Fingerprint,
 } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<
+    | 'm27-test-suite'
+    | 'forensic-watermark'
+    | 'm24-26-test-suite'
+    | 'scte35-dai'
+    | 'multi-room-cast'
+    | 'hybrid-rf-tuner'
+    | 'm19-20-test-suite'
+    | 'stalker-portal'
+    | 'leanback-spatial'
+    | 'm21-23-test-suite'
+    | 'ull-player'
+    | 'ai-highlights'
+    | 'p2p-cdn-mesh'
+    | 'm16-18-test-suite'
+    | 'multi-view'
+    | 'offline-vault'
+    | 'channel-health'
+    | 'm11-14-test-suite'
+    | 'audio-subtitles'
+    | 'pvr-recordings'
+    | 'abr-qos'
+    | 'parental-vault'
     | 'm6-10-test-suite'
     | 'stalker-portal'
     | 'advanced-diagnostics'
@@ -82,7 +130,7 @@ export default function App() {
     | 'fixtures'
     | 'logs'
     | 'architecture'
-  >('m6-10-test-suite');
+  >('m16-18-test-suite');
 
   const [report, setReport] = useState<Milestone0DiagnosticReport | null>(null);
 
@@ -145,11 +193,11 @@ export default function App() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="font-bold text-slate-100 text-base tracking-tight">IPTV Player &amp; Video Suite</h1>
-                <span className="text-[10px] font-mono font-semibold bg-indigo-950 text-indigo-300 border border-indigo-800 px-2 py-0.5 rounded-full">
-                  Milestones 0 — 10 Complete
+                <span className="text-[10px] font-mono font-semibold bg-emerald-950 text-emerald-300 border border-emerald-800 px-2 py-0.5 rounded-full">
+                  Milestones 0 — 14 Complete
                 </span>
               </div>
-              <p className="text-xs text-slate-400">Multi-Source Matrix • Stalker/MAG • 8K/HDR Decoders • VPN Diagnostics • TV 10-Foot UX</p>
+              <p className="text-xs text-slate-400">Atmos/Sub Sync (M11) • DVR/Timeshift (M12) • ABR/QoS (M13) • Parental Vault (M14)</p>
             </div>
           </div>
 
@@ -171,6 +219,288 @@ export default function App() {
 
         {/* Tab Navigation */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex space-x-1 overflow-x-auto pb-1 text-xs font-medium scrollbar-thin">
+          {/* Milestone 27 Primary Tabs */}
+          <button
+            id="tab-m27-test-suite"
+            onClick={() => setActiveTab('m27-test-suite')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'm27-test-suite'
+                ? 'border-rose-500 bg-slate-800 text-rose-300 font-semibold shadow-inner'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4 text-rose-400" /> M27 Tests (4)
+          </button>
+
+          <button
+            id="tab-forensic-watermark"
+            onClick={() => setActiveTab('forensic-watermark')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'forensic-watermark'
+                ? 'border-rose-500 bg-slate-800 text-rose-300 font-semibold'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Fingerprint className="w-4 h-4 text-rose-400" /> M27: Forensic Watermarking
+          </button>
+
+          {/* Divider */}
+          <div className="h-5 w-px bg-slate-800 self-center mx-1" />
+
+          {/* Milestones 24 - 26 Primary Tabs */}
+          <button
+            id="tab-m24-26-test-suite"
+            onClick={() => setActiveTab('m24-26-test-suite')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'm24-26-test-suite'
+                ? 'border-indigo-500 bg-slate-800 text-indigo-300 font-semibold shadow-inner'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4 text-indigo-400" /> M24-26 Tests (12)
+          </button>
+
+          <button
+            id="tab-scte35-dai"
+            onClick={() => setActiveTab('scte35-dai')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'scte35-dai'
+                ? 'border-indigo-500 bg-slate-800 text-indigo-300 font-semibold'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Tag className="w-4 h-4 text-indigo-400" /> M24: DAI &amp; SCTE-35
+          </button>
+
+          <button
+            id="tab-multi-room-cast"
+            onClick={() => setActiveTab('multi-room-cast')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'multi-room-cast'
+                ? 'border-cyan-500 bg-slate-800 text-cyan-300 font-semibold'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Cast className="w-4 h-4 text-cyan-400" /> M25: Multi-Room Cast
+          </button>
+
+          <button
+            id="tab-hybrid-rf-tuner"
+            onClick={() => setActiveTab('hybrid-rf-tuner')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'hybrid-rf-tuner'
+                ? 'border-emerald-500 bg-slate-800 text-emerald-300 font-semibold'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Radio className="w-4 h-4 text-emerald-400" /> M26: Hybrid RF &amp; BISS
+          </button>
+
+          {/* Divider */}
+          <div className="h-5 w-px bg-slate-800 self-center mx-1" />
+
+          {/* Milestones 19 - 20 Primary Tabs */}
+          <button
+            id="tab-m19-20-test-suite"
+            onClick={() => setActiveTab('m19-20-test-suite')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'm19-20-test-suite'
+                ? 'border-indigo-500 bg-slate-800 text-indigo-300 font-semibold shadow-inner'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4 text-indigo-400" /> M19-20 Tests (8)
+          </button>
+
+          <button
+            id="tab-stalker-portal"
+            onClick={() => setActiveTab('stalker-portal')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'stalker-portal'
+                ? 'border-indigo-500 bg-slate-800 text-indigo-300 font-semibold'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Tv className="w-4 h-4 text-indigo-400" /> M19: Stalker / MAG
+          </button>
+
+          <button
+            id="tab-leanback-spatial"
+            onClick={() => setActiveTab('leanback-spatial')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'leanback-spatial'
+                ? 'border-cyan-500 bg-slate-800 text-cyan-300 font-semibold'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Sliders className="w-4 h-4 text-cyan-400" /> M20: 10-Foot Leanback
+          </button>
+
+          {/* Divider */}
+          <div className="h-5 w-px bg-slate-800 self-center mx-1" />
+
+          {/* Milestones 21 - 23 Primary Tabs */}
+          <button
+            id="tab-m21-23-test-suite"
+            onClick={() => setActiveTab('m21-23-test-suite')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'm21-23-test-suite'
+                ? 'border-cyan-500 bg-slate-800 text-cyan-300 font-semibold shadow-inner'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4 text-cyan-400" /> M21-23 Tests (9)
+          </button>
+
+          <button
+            id="tab-ull-player"
+            onClick={() => setActiveTab('ull-player')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'ull-player'
+                ? 'border-cyan-500 bg-slate-800 text-cyan-300 font-semibold'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Zap className="w-4 h-4 text-cyan-400" /> M21: ULL &amp; CMAF
+          </button>
+
+          <button
+            id="tab-ai-highlights"
+            onClick={() => setActiveTab('ai-highlights')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'ai-highlights'
+                ? 'border-amber-500 bg-slate-800 text-amber-300 font-semibold'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Sliders className="w-4 h-4 text-amber-400" /> M22: AI Highlights &amp; Audio
+          </button>
+
+          <button
+            id="tab-p2p-cdn-mesh"
+            onClick={() => setActiveTab('p2p-cdn-mesh')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'p2p-cdn-mesh'
+                ? 'border-emerald-500 bg-slate-800 text-emerald-300 font-semibold'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Activity className="w-4 h-4 text-emerald-400" /> M23: P2P Swarm &amp; CDN
+          </button>
+
+          {/* Divider */}
+          <div className="h-5 w-px bg-slate-800 self-center mx-1" />
+
+          {/* Milestones 16 - 18 Primary Tabs */}
+          <button
+            id="tab-m16-18-test-suite"
+            onClick={() => setActiveTab('m16-18-test-suite')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'm16-18-test-suite'
+                ? 'border-indigo-500 bg-slate-800 text-indigo-300 font-semibold shadow-inner'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4 text-indigo-400" /> M16-18 Test Suite (9)
+          </button>
+
+          <button
+            id="tab-multi-view"
+            onClick={() => setActiveTab('multi-view')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'multi-view'
+                ? 'border-indigo-500 bg-slate-800 text-indigo-300 font-semibold'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Layers className="w-4 h-4 text-indigo-400" /> M16: Multi-View (Quad / PiP)
+          </button>
+
+          <button
+            id="tab-offline-vault"
+            onClick={() => setActiveTab('offline-vault')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'offline-vault'
+                ? 'border-cyan-500 bg-slate-800 text-cyan-300 font-semibold'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <HardDrive className="w-4 h-4 text-cyan-400" /> M17: Offline DRM Vault
+          </button>
+
+          <button
+            id="tab-channel-health"
+            onClick={() => setActiveTab('channel-health')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'channel-health'
+                ? 'border-emerald-500 bg-slate-800 text-emerald-300 font-semibold'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Activity className="w-4 h-4 text-emerald-400" /> M18: Watchdog &amp; Failover
+          </button>
+
+          {/* Milestones 11 - 14 Primary Tabs */}
+          <button
+            id="tab-m11-14-test-suite"
+            onClick={() => setActiveTab('m11-14-test-suite')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'm11-14-test-suite'
+                ? 'border-indigo-500 bg-slate-800 text-indigo-300 font-semibold shadow-inner'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4 text-indigo-400" /> M11-14 Tests (12)
+          </button>
+
+          <button
+            id="tab-audio-subtitles"
+            onClick={() => setActiveTab('audio-subtitles')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'audio-subtitles'
+                ? 'border-indigo-500 bg-slate-800 text-indigo-300 font-semibold'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Volume2 className="w-4 h-4 text-indigo-400" /> M11: Audio &amp; Subtitles
+          </button>
+
+          <button
+            id="tab-pvr-recordings"
+            onClick={() => setActiveTab('pvr-recordings')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'pvr-recordings'
+                ? 'border-cyan-500 bg-slate-800 text-cyan-300 font-semibold'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <HardDrive className="w-4 h-4 text-cyan-400" /> M12: DVR &amp; Timeshift
+          </button>
+
+          <button
+            id="tab-abr-qos"
+            onClick={() => setActiveTab('abr-qos')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'abr-qos'
+                ? 'border-emerald-500 bg-slate-800 text-emerald-300 font-semibold'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Activity className="w-4 h-4 text-emerald-400" /> M13: ABR &amp; QoS Telemetry
+          </button>
+
+          <button
+            id="tab-parental-vault"
+            onClick={() => setActiveTab('parental-vault')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'parental-vault'
+                ? 'border-purple-500 bg-slate-800 text-purple-300 font-semibold'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Lock className="w-4 h-4 text-purple-400" /> M14: Parental Vault
+          </button>
+
           {/* Milestones 6 - 10 Primary Tabs */}
           <button
             id="tab-m6-10-test-suite"
@@ -181,7 +511,7 @@ export default function App() {
                 : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
             }`}
           >
-            <ShieldCheck className="w-4 h-4 text-cyan-400" /> M6-10 Test Suite (11)
+            <ShieldCheck className="w-4 h-4 text-cyan-400" /> M6-10 Tests (11)
           </button>
 
           <button
@@ -535,6 +865,50 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full">
+        {/* Milestone 27 Views */}
+        {activeTab === 'm27-test-suite' && <Milestone27TestSuite />}
+        {activeTab === 'forensic-watermark' && (
+          <ForensicWatermarkSurface onPlayStream={handlePlayMediaFromVodOrCatchup} />
+        )}
+
+        {/* Milestones 24 - 26 Views */}
+        {activeTab === 'm24-26-test-suite' && <Milestones24to26TestSuite />}
+        {activeTab === 'scte35-dai' && (
+          <Scte35DaiSurface onPlayStream={handlePlayMediaFromVodOrCatchup} />
+        )}
+        {activeTab === 'multi-room-cast' && (
+          <MultiRoomCastSurface onPlayStream={handlePlayMediaFromVodOrCatchup} />
+        )}
+        {activeTab === 'hybrid-rf-tuner' && (
+          <HybridRfTunerSurface onPlayStream={handlePlayMediaFromVodOrCatchup} />
+        )}
+
+        {/* Milestones 19 - 20 Views */}
+        {activeTab === 'm19-20-test-suite' && <Milestones19to20TestSuite />}
+        {activeTab === 'stalker-portal' && (
+          <StalkerPortalSurface onPlayStream={handlePlayMediaFromVodOrCatchup} />
+        )}
+        {activeTab === 'leanback-spatial' && <LeanbackSpatialSurface />}
+
+        {/* Milestones 21 - 23 Views */}
+        {activeTab === 'm21-23-test-suite' && <Milestones21to23TestSuite />}
+        {activeTab === 'ull-player' && <UltraLowLatencySurface />}
+        {activeTab === 'ai-highlights' && <AiSportsHighlightsSurface />}
+        {activeTab === 'p2p-cdn-mesh' && <P2pCdnMeshSurface />}
+
+        {/* Milestones 16 - 18 Views */}
+        {activeTab === 'm16-18-test-suite' && <Milestones16to18TestSuite />}
+        {activeTab === 'multi-view' && <MultiViewSurface />}
+        {activeTab === 'offline-vault' && <OfflineDownloadVault />}
+        {activeTab === 'channel-health' && <ChannelHealthWatchdogSurface />}
+
+        {/* Milestones 11 - 14 Views */}
+        {activeTab === 'm11-14-test-suite' && <Milestones11to14TestSuite />}
+        {activeTab === 'audio-subtitles' && <AudioSubtitleEngineSurface />}
+        {activeTab === 'pvr-recordings' && <PvrRecordingManager />}
+        {activeTab === 'abr-qos' && <AbrQosMonitor />}
+        {activeTab === 'parental-vault' && <ParentalControlVault />}
+
         {/* Milestones 6 - 10 Views */}
         {activeTab === 'm6-10-test-suite' && <Milestones6to10TestSuite />}
         {activeTab === 'multi-source' && (

@@ -54,7 +54,7 @@ async function runTest(
       durationMs,
       assertionMessage: msg,
     });
-    console.log(`\x1b[32m[✓ PASS]\x1b[0m [${milestone}] ${testId}: ${name} (${durationMs}ms)`);
+    console.log(`[PASS] [${milestone}] ${testId}: ${name} (${durationMs}ms)`);
   } catch (err: any) {
     const durationMs = Date.now() - start;
     results.push({
@@ -66,7 +66,7 @@ async function runTest(
       durationMs,
       error: err.message,
     });
-    console.error(`\x1b[31m[✗ FAIL]\x1b[0m [${milestone}] ${testId}: ${name} - ${err.message}`);
+    console.error(`[FAIL] [${milestone}] ${testId}: ${name} - ${err.message}`);
   }
 }
 

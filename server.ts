@@ -26,6 +26,8 @@ import { matchChannelToXmltv, batchMatchChannelsToXmltv } from './src/lib/fuzzyE
 import { runMilestone4TestSuite } from './scripts/milestone4_tests';
 import { runMilestone5TestSuite } from './scripts/milestone5_tests';
 import { runMilestones6To10TestSuite } from './scripts/milestones_6_to_10_tests';
+import { runMilestones11To14TestSuite } from './scripts/milestones_11_to_14_tests';
+import { runMilestones16To18TestSuite } from './scripts/milestones_16_to_18_tests';
 import { ChannelManager, RemoteZapperController } from './src/lib/channelManager';
 import { handleLiveStreamProxy, streamDirectMedia, rewriteM3u8Playlist } from './src/lib/streamProxy';
 import {
@@ -429,6 +431,179 @@ async function startServer() {
       res.json(parsed);
     } catch (err: any) {
       res.status(500).json({ error: redact(err.message) });
+    }
+  });
+
+  // 5b. Fetch Remote M3U Content (Server-Side Proxy bypassing CORS & HTTP blocks)
+  app.post('/api/m3u/fetch-remote', async (req, res) => {
+    const { url, userAgent, timeoutMs = 15000 } = req.body;
+    if (!url || typeof url !== 'string') {
+      return res.status(400).json({ error: 'Valid M3U URL is required' });
+    }
+
+    const start = Date.now();
+    const userAgentsToTry = [
+      userAgent || 'IPTVSmartersPro/3.1.5.1 (Linux; Android 12; Build/SQ1D.220105.007)',
+      'VLC/3.0.18 LibVLC/3.0.18',
+      'TiviMate/4.7.0 (Android TV)',
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    ];
+
+    let lastError: any = null;
+    let fetchedText: string | null = null;
+    let finalStatus = 200;
+    let usedUa = userAgentsToTry[0];
+
+    for (const ua of userAgentsToTry) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'User-Agent': ua,
+            Accept: '*/*',
+            'Accept-Encoding': 'gzip, deflate, br',
+            Connection: 'keep-alive',
+          },
+          redirect: 'follow',
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        finalStatus = response.status;
+
+        if (response.ok) {
+          fetchedText = await response.text();
+          usedUa = ua;
+          break;
+        } else if (response.status === 403 || response.status === 401) {
+          // Provider rejected this User-Agent, try next UA
+          lastError = new Error(`HTTP ${response.status}: ${response.statusText}`);
+          continue;
+        } else {
+          lastError = new Error(`HTTP ${response.status}: ${response.statusText}`);
+          break;
+        }
+      } catch (err: any) {
+        lastError = err;
+        if (err.name === 'AbortError') {
+          lastError = new Error(`Connection timed out after ${timeoutMs}ms`);
+          break;
+        }
+      }
+    }
+
+    const duration = Date.now() - start;
+
+    if (fetchedText === null) {
+      const errMsg = lastError?.message || 'Failed to fetch remote M3U playlist';
+      addDiagnosticLog({
+        component: 'M3UIngestEngine',
+        errorClass: 'RemoteFetchFailed',
+        httpStatus: finalStatus,
+        redactedUrl: redactUrl(url),
+        durationMs: duration,
+        message: `Remote M3U fetch failed: ${errMsg}`,
+      });
+      return res.status(finalStatus >= 400 && finalStatus < 600 ? finalStatus : 502).json({
+        success: false,
+        error: errMsg,
+        redactedUrl: redactUrl(url),
+        durationMs: duration,
+        recommendation:
+          'Ensure the URL is reachable, credentials in the URL are active, or upload the .m3u file directly.',
+      });
+    }
+
+    addDiagnosticLog({
+      component: 'M3UIngestEngine',
+      errorClass: null,
+      httpStatus: 200,
+      redactedUrl: redactUrl(url),
+      durationMs: duration,
+      message: `Successfully fetched remote M3U playlist (${(fetchedText.length / 1024).toFixed(1)} KB)`,
+    });
+
+    res.json({
+      success: true,
+      playlistText: fetchedText,
+      sizeBytes: fetchedText.length,
+      durationMs: duration,
+      usedUserAgent: usedUa,
+    });
+  });
+
+  // 5c. Complete M3U Ingest & Normalize Pipeline (from URL or Raw Text)
+  app.post('/api/m3u/ingest', async (req, res) => {
+    const { url, playlistText, sourceName, userAgent } = req.body;
+
+    let contentToParse = playlistText;
+
+    if (!contentToParse && url) {
+      try {
+        const fetchRes = await fetch(url, {
+          headers: {
+            'User-Agent': userAgent || 'IPTVSmartersPro/3.1.5.1 (Linux; Android 12)',
+            Accept: '*/*',
+          },
+          redirect: 'follow',
+        });
+
+        if (!fetchRes.ok) {
+          return res.status(fetchRes.status).json({
+            success: false,
+            error: `Provider returned HTTP ${fetchRes.status} (${fetchRes.statusText})`,
+            redactedUrl: redactUrl(url),
+          });
+        }
+        contentToParse = await fetchRes.text();
+      } catch (err: any) {
+        return res.status(502).json({
+          success: false,
+          error: `Network error downloading M3U: ${err.message}`,
+          redactedUrl: redactUrl(url),
+        });
+      }
+    }
+
+    if (!contentToParse) {
+      return res.status(400).json({ error: 'Either url or playlistText must be provided' });
+    }
+
+    try {
+      const parsed = parseM3UPlaylist(contentToParse);
+      const sourceId = `src_m3u_${Date.now()}`;
+      const name = sourceName || (url ? `Remote M3U (${new URL(url).hostname})` : 'Imported M3U Playlist');
+
+      addDiagnosticLog({
+        component: 'M3UIngestEngine',
+        errorClass: null,
+        httpStatus: 200,
+        redactedUrl: url ? redactUrl(url) : 'Direct Text Ingestion',
+        durationMs: 15,
+        message: `Ingested ${parsed.channels.length} channels across ${parsed.categories.length} categories from M3U (${name})`,
+      });
+
+      res.json({
+        success: true,
+        sourceId,
+        sourceName: name,
+        totalChannels: parsed.totalParsed,
+        categoriesCount: parsed.categories.length,
+        unassignedCount: parsed.unassignedCount,
+        epgUrl: parsed.epgUrl,
+        categories: parsed.categories,
+        channels: parsed.channels,
+        capabilities: parsed.capabilities,
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        error: `M3U Parsing error: ${redact(err.message)}`,
+      });
     }
   });
 
@@ -1269,6 +1444,26 @@ async function startServer() {
   app.get('/api/m6-10/test-suite', async (_req, res) => {
     try {
       const summary = await runMilestones6To10TestSuite();
+      res.json(summary);
+    } catch (err: any) {
+      res.status(500).json({ error: redact(err.message) });
+    }
+  });
+
+  // Milestones 11 to 14 Test Suite Runner
+  app.get('/api/m11-14/test-suite', async (_req, res) => {
+    try {
+      const summary = await runMilestones11To14TestSuite();
+      res.json(summary);
+    } catch (err: any) {
+      res.status(500).json({ error: redact(err.message) });
+    }
+  });
+
+  // Milestones 16 to 18 Test Suite Runner
+  app.get('/api/m16-18/test-suite', async (_req, res) => {
+    try {
+      const summary = await runMilestones16To18TestSuite();
       res.json(summary);
     } catch (err: any) {
       res.status(500).json({ error: redact(err.message) });
