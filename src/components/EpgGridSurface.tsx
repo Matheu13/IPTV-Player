@@ -588,7 +588,8 @@ export const EpgGridSurface: React.FC<EpgGridSurfaceProps> = ({ onTuneChannel, o
                           >
                             <span className="text-slate-400 flex items-center gap-2">
                               <Info className="w-3.5 h-3.5 text-slate-500" />
-                              <span>No schedule guide broadcast for this channel • Active live stream</span>
+                              <span className="font-medium text-slate-300">No EPG available</span>
+                              <span className="text-slate-500 text-[11px] hidden sm:inline">• Live stream active &amp; playable</span>
                             </span>
                             <span className="text-[11px] font-bold text-indigo-400 hover:text-indigo-300 flex items-center gap-1">
                               <Play className="w-3 h-3 fill-current" /> Watch Live

@@ -28,8 +28,12 @@ import { runMilestone5TestSuite } from './scripts/milestone5_tests';
 import { runMilestones6To10TestSuite } from './scripts/milestones_6_to_10_tests';
 import { runMilestones11To14TestSuite } from './scripts/milestones_11_to_14_tests';
 import { runMilestones16To18TestSuite } from './scripts/milestones_16_to_18_tests';
+import { runMilestone29TestSuite } from './scripts/milestone_29_tests';
+import { runMilestone30TestSuite } from './scripts/milestone_30_tests';
+import { runMilestone31Tests } from './scripts/milestone_31_tests';
+import { globalFavoritesHistoryEngine } from './src/lib/favoritesHistoryEngine';
 import { ChannelManager, RemoteZapperController } from './src/lib/channelManager';
-import { handleLiveStreamProxy, streamDirectMedia, rewriteM3u8Playlist } from './src/lib/streamProxy';
+import { handleLiveStreamProxy, streamDirectMedia, rewriteM3u8Playlist, handleUniversalProxy } from './src/lib/streamProxy';
 import {
   FIXTURE_XMLTV_RAW,
   FIXTURE_XTREAM_EPG_TABLE,
@@ -770,14 +774,23 @@ async function startServer() {
     }
   });
 
-  // 9. Query Live Channels with Pagination & Search
+  // 9. Query Live Channels with Cursor-based Pagination & Search
   app.get('/api/m1/channels/live', (req, res) => {
     try {
       const categoryId = req.query.category as string;
       const search = req.query.search as string;
+      const cursor = req.query.cursor as string;
       const page = Math.max(1, parseInt((req.query.page as string) || '1', 10));
-      const limit = Math.min(100, Math.max(1, parseInt((req.query.limit as string) || '50', 10)));
-      const offset = (page - 1) * limit;
+      const limit = Math.min(50000, Math.max(1, parseInt((req.query.limit as string) || '50', 10)));
+      
+      let offset = (page - 1) * limit;
+      if (cursor !== undefined && cursor !== null && cursor !== '') {
+        const parsedCursor = parseInt(cursor, 10);
+        if (!isNaN(parsedCursor) && parsedCursor >= 0) {
+          offset = parsedCursor;
+        }
+      }
+
       const sourceId = req.query.sourceId as string;
 
       const channels = sqliteEpgDB.getLiveChannels({
@@ -794,9 +807,16 @@ async function startServer() {
         sourceId,
       });
 
+      const hasMore = offset + channels.length < total;
+      const nextCursor = hasMore ? String(offset + channels.length) : null;
+
       res.json({
         page,
         limit,
+        offset,
+        cursor: cursor || String(offset),
+        nextCursor,
+        hasMore,
         total,
         totalPages: Math.ceil(total / limit),
         channels: channels.map((c) => ({
@@ -875,12 +895,12 @@ async function startServer() {
     streamDirectMedia(targetUrl, req, res);
   });
 
-  app.get('/api/stream/proxy', (req, res) => {
+  app.get('/api/stream/proxy', async (req, res) => {
     const targetUrl = req.query.url as string;
     if (!targetUrl) {
       return res.status(400).send('Missing url query parameter');
     }
-    streamDirectMedia(targetUrl, req, res);
+    await handleUniversalProxy(targetUrl, req, res);
   });
 
   // ==========================================
@@ -1470,6 +1490,163 @@ async function startServer() {
     }
   });
 
+  // ==========================================
+  // MILESTONE 29: FAVORITES & WATCH HISTORY
+  // ==========================================
+  app.get('/api/m29/test-suite', async (_req, res) => {
+    try {
+      const summary = await runMilestone29TestSuite();
+      res.json(summary);
+    } catch (err: any) {
+      res.status(500).json({ error: redact(err.message) });
+    }
+  });
+
+  app.get('/api/m29/favorites', (req, res) => {
+    try {
+      const sourceId = req.query.sourceId as string;
+      const favorites = globalFavoritesHistoryEngine.getFavorites(sourceId);
+      res.json({ count: favorites.length, favorites });
+    } catch (err: any) {
+      res.status(500).json({ error: redact(err.message) });
+    }
+  });
+
+  app.post('/api/m29/favorites/toggle', (req, res) => {
+    try {
+      const item = req.body;
+      if (!item || !item.channelId || !item.sourceId) {
+        return res.status(400).json({ error: 'channelId and sourceId are required' });
+      }
+      const isFav = globalFavoritesHistoryEngine.toggleFavorite(item);
+      res.json({ isFavorite: isFav, compositeKey: `${item.sourceId}:::${item.channelId}` });
+    } catch (err: any) {
+      res.status(500).json({ error: redact(err.message) });
+    }
+  });
+
+  app.get('/api/m29/recents', (req, res) => {
+    try {
+      const sourceId = req.query.sourceId as string;
+      const recents = globalFavoritesHistoryEngine.getRecentChannels(sourceId);
+      res.json({ count: recents.length, recents });
+    } catch (err: any) {
+      res.status(500).json({ error: redact(err.message) });
+    }
+  });
+
+  app.post('/api/m29/recents/record', (req, res) => {
+    try {
+      const item = req.body;
+      if (!item || !item.channelId || !item.sourceId) {
+        return res.status(400).json({ error: 'channelId and sourceId are required' });
+      }
+      const recent = globalFavoritesHistoryEngine.recordChannelWatch(item);
+      res.json({ success: true, recent });
+    } catch (err: any) {
+      res.status(500).json({ error: redact(err.message) });
+    }
+  });
+
+  app.get('/api/m29/positions', (_req, res) => {
+    try {
+      const positions = globalFavoritesHistoryEngine.getAllPlaybackPositions();
+      res.json({ count: positions.length, positions });
+    } catch (err: any) {
+      res.status(500).json({ error: redact(err.message) });
+    }
+  });
+
+  app.post('/api/m29/positions/save', (req, res) => {
+    try {
+      const item = req.body;
+      if (!item || !item.mediaId || !item.sourceId) {
+        return res.status(400).json({ error: 'mediaId and sourceId are required' });
+      }
+      const saved = globalFavoritesHistoryEngine.savePlaybackPosition(item);
+      res.json({ success: true, position: saved });
+    } catch (err: any) {
+      res.status(500).json({ error: redact(err.message) });
+    }
+  });
+
+  app.get('/api/m29/restore-check', (_req, res) => {
+    try {
+      const check = globalFavoritesHistoryEngine.evaluatePlaybackRestoration();
+      res.json(check);
+    } catch (err: any) {
+      res.status(500).json({ error: redact(err.message) });
+    }
+  });
+
+  // ==========================================
+  // MILESTONE 30: EPG & XMLTV STREAMING
+  // ==========================================
+  app.get('/api/m30/test-suite', async (_req, res) => {
+    try {
+      const summary = await runMilestone30TestSuite();
+      res.json(summary);
+    } catch (err: any) {
+      res.status(500).json({ error: redact(err.message) });
+    }
+  });
+
+  app.get('/api/m30/epg/program/:id', (req, res) => {
+    try {
+      const prog = sqliteEpgDB.getProgramById(req.params.id);
+      if (!prog) return res.status(404).json({ error: 'Program not found' });
+      res.json(prog);
+    } catch (err: any) {
+      res.status(500).json({ error: redact(err.message) });
+    }
+  });
+
+  app.get('/api/m30/epg/now-next/:channelId', (req, res) => {
+    try {
+      const { channelId } = req.params;
+      const targetSec = req.query.targetTime ? Number(req.query.targetTime) : Math.floor(Date.now() / 1000);
+      const data = sqliteEpgDB.getNowAndNext(channelId, targetSec);
+      res.json({ channelId, ...data });
+    } catch (err: any) {
+      res.status(500).json({ error: redact(err.message) });
+    }
+  });
+
+  // ==========================================
+  // MILESTONE 31: EPG MATCHING & UNCERTAINTY FLAGGING
+  // ==========================================
+  app.get('/api/m31/test-suite', async (_req, res) => {
+    try {
+      const results = await runMilestone31Tests();
+      const totalPassed = results.filter((r) => r.passed).length;
+      res.json({
+        milestone: 'Milestone 31: EPG Matching',
+        totalPassed,
+        totalFailed: results.length - totalPassed,
+        results,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: redact(err.message) });
+    }
+  });
+
+  app.post('/api/m31/batch-match', (req, res) => {
+    try {
+      const { channels, threshold } = req.body;
+      if (!Array.isArray(channels)) {
+        return res.status(400).json({ error: 'channels array is required' });
+      }
+      const candidates = sqliteEpgDB.getAllChannels();
+      const mappings = batchMatchChannelsToXmltv(channels, candidates, {}, threshold || 0.45);
+      res.json({
+        count: mappings.length,
+        mappings,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: redact(err.message) });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
@@ -1487,6 +1664,60 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[IPTV Server] Running on http://localhost:${PORT}`);
+
+    // Auto-ingest default Xtream provider channels in background if DB is empty
+    setTimeout(async () => {
+      try {
+        const count = sqliteEpgDB.getLiveChannelsCount();
+        if (count === 0) {
+          console.log('[AutoIngest] Populating initial live channels into database from default Xtream provider...');
+          const host = 'http://dnsjibre.xyz:80';
+          const user = 'B3GC9NESBU82M3W';
+          const pass = '2pFz3E7P3d';
+          const sourceId = `src_${Buffer.from(host + user).toString('base64url').slice(0, 12)}`;
+
+          const client = new XtreamClient({
+            baseUrl: host,
+            username: user,
+            password: pass,
+          });
+
+          const catalog = await client.fetchFullCatalog();
+          sqliteEpgDB.saveSource({
+            id: sourceId,
+            name: 'Primary Xtream (dnsjibre.xyz)',
+            sourceType: 'XTREAM',
+            baseUrl: host,
+            username: user,
+            status: catalog.account.authStatus,
+            maxConnections: catalog.account.maxConnections,
+            channelCount: catalog.channels.length,
+            categoryCount: catalog.categories.length,
+            lastRefreshedAt: Date.now(),
+            metadataJson: JSON.stringify({
+              expirationDate: catalog.account.expirationDate,
+              allowedFormats: catalog.account.allowedOutputFormats,
+              password: pass,
+            }),
+          });
+
+          sqliteEpgDB.insertLiveCategories(
+            sourceId,
+            catalog.categories.map((c) => ({
+              id: String(c.id),
+              name: c.name,
+              parentId: typeof c.parentId === 'number' ? c.parentId : parseInt(String(c.parentId || 0), 10) || undefined,
+              channelCount: c.channelCount,
+            }))
+          );
+
+          sqliteEpgDB.insertLiveChannelsBatch(sourceId, catalog.channels);
+          console.log(`[AutoIngest] Successfully ingested ${catalog.channels.length} live channels.`);
+        }
+      } catch (err: any) {
+        console.warn('[AutoIngest] Background ingestion notice:', err.message);
+      }
+    }, 1000);
   });
 }
 

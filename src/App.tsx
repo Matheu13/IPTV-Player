@@ -40,6 +40,13 @@ import { MultiRoomCastSurface } from './components/MultiRoomCastSurface';
 import { HybridRfTunerSurface } from './components/HybridRfTunerSurface';
 import { Milestone27TestSuite } from './components/Milestone27TestSuite';
 import { ForensicWatermarkSurface } from './components/ForensicWatermarkSurface';
+import { Milestone28TestSuite } from './components/Milestone28TestSuite';
+import { Milestone29TestSuite } from './components/Milestone29TestSuite';
+import { Milestone30TestSuite } from './components/Milestone30TestSuite';
+import { Milestone31TestSuite } from './components/Milestone31TestSuite';
+import { SpatialAudioSurface } from './components/SpatialAudioSurface';
+import { MilestoneUiRequirementsTestSuite } from './components/MilestoneUiRequirementsTestSuite';
+import { UnifiedIptvSurface } from './components/UnifiedIptvSurface';
 import { MultiViewSurface } from './components/MultiViewSurface';
 import { OfflineDownloadVault } from './components/OfflineDownloadVault';
 import { ChannelHealthWatchdogSurface } from './components/ChannelHealthWatchdogSurface';
@@ -76,10 +83,19 @@ import {
   Tag,
   Cast,
   Fingerprint,
+  Headphones,
+  Link2,
 } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<
+    | 'unified-iptv'
+    | 'm31-test-suite'
+    | 'm30-test-suite'
+    | 'm29-test-suite'
+    | 'ui-req-test-suite'
+    | 'm28-test-suite'
+    | 'spatial-audio'
     | 'm27-test-suite'
     | 'forensic-watermark'
     | 'm24-26-test-suite'
@@ -160,7 +176,7 @@ export default function App() {
       : (maybeName ?? 'Channel');
     const streamUrl = typeof channelIdOrObj === 'object' && channelIdOrObj?.streamUrl
       ? channelIdOrObj.streamUrl
-      : `http://provider.panel-stream.net:8080/live/user1/pass1/${channelId}.m3u8`;
+      : `/api/stream/live/${channelId}.m3u8`;
 
     globalPlayerEngine.loadChannel({
       id: channelId,
@@ -219,6 +235,101 @@ export default function App() {
 
         {/* Tab Navigation */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex space-x-1 overflow-x-auto pb-1 text-xs font-medium scrollbar-thin">
+          {/* Milestone 28 UI Requirements - Unified IPTV Player */}
+          <button
+            id="tab-unified-iptv"
+            onClick={() => setActiveTab('unified-iptv')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'unified-iptv'
+                ? 'border-indigo-500 bg-slate-800 text-indigo-300 font-semibold shadow-inner'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Tv className="w-4 h-4 text-indigo-400" /> Unified IPTV Player (10k+)
+          </button>
+
+          {/* Milestone 29: Favorites & Watch History */}
+          <button
+            id="tab-m29-test-suite"
+            onClick={() => setActiveTab('m29-test-suite')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'm29-test-suite'
+                ? 'border-rose-500 bg-slate-800 text-rose-300 font-semibold shadow-inner'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Heart className="w-4 h-4 text-rose-400" /> M29: Favorites &amp; History
+          </button>
+
+          {/* Milestone 31: EPG Channel Matching & Uncertainty Guard */}
+          <button
+            id="tab-m31-test-suite"
+            onClick={() => setActiveTab('m31-test-suite')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'm31-test-suite'
+                ? 'border-indigo-500 bg-slate-800 text-indigo-300 font-semibold shadow-inner'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Link2 className="w-4 h-4 text-indigo-400" /> M31: EPG Matching (7)
+          </button>
+
+          {/* Milestone 30: EPG & XMLTV Streaming */}
+          <button
+            id="tab-m30-test-suite"
+            onClick={() => setActiveTab('m30-test-suite')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'm30-test-suite'
+                ? 'border-sky-500 bg-slate-800 text-sky-300 font-semibold shadow-inner'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Calendar className="w-4 h-4 text-sky-400" /> M30: EPG XMLTV Streaming
+          </button>
+
+          <button
+            id="tab-ui-req-test-suite"
+            onClick={() => setActiveTab('ui-req-test-suite')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'ui-req-test-suite'
+                ? 'border-indigo-500 bg-slate-800 text-indigo-300 font-semibold shadow-inner'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4 text-indigo-400" /> UI Tests (5)
+          </button>
+
+          {/* Divider */}
+          <div className="h-5 w-px bg-slate-800 self-center mx-1" />
+
+          {/* Milestone 28 Spatial Audio */}
+          <button
+            id="tab-m28-test-suite"
+            onClick={() => setActiveTab('m28-test-suite')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'm28-test-suite'
+                ? 'border-indigo-500 bg-slate-800 text-indigo-300 font-semibold shadow-inner'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4 text-indigo-400" /> M28 Tests (4)
+          </button>
+
+          <button
+            id="tab-spatial-audio"
+            onClick={() => setActiveTab('spatial-audio')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'spatial-audio'
+                ? 'border-indigo-500 bg-slate-800 text-indigo-300 font-semibold'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Headphones className="w-4 h-4 text-indigo-400" /> M28: Spatial Audio
+          </button>
+
+          {/* Divider */}
+          <div className="h-5 w-px bg-slate-800 self-center mx-1" />
+
           {/* Milestone 27 Primary Tabs */}
           <button
             id="tab-m27-test-suite"
@@ -865,6 +976,21 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full">
+        {/* Milestone 29, 30 & 31 Views */}
+        {activeTab === 'm31-test-suite' && <Milestone31TestSuite />}
+        {activeTab === 'm30-test-suite' && <Milestone30TestSuite />}
+        {activeTab === 'm29-test-suite' && <Milestone29TestSuite />}
+
+        {/* Milestone 28 UI Requirements Views */}
+        {activeTab === 'unified-iptv' && <UnifiedIptvSurface />}
+        {activeTab === 'ui-req-test-suite' && <MilestoneUiRequirementsTestSuite />}
+
+        {/* Milestone 28 Views */}
+        {activeTab === 'm28-test-suite' && <Milestone28TestSuite />}
+        {activeTab === 'spatial-audio' && (
+          <SpatialAudioSurface onPlayStream={handlePlayMediaFromVodOrCatchup} />
+        )}
+
         {/* Milestone 27 Views */}
         {activeTab === 'm27-test-suite' && <Milestone27TestSuite />}
         {activeTab === 'forensic-watermark' && (

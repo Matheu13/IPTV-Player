@@ -20,6 +20,9 @@ export interface ChannelNowNext {
   hasEpgData: boolean;
   matchType?: string;
   matchScore?: number;
+  isUncertain?: boolean;
+  flaggedCandidateName?: string;
+  reviewReason?: string;
   now: UnifiedEpgProgram | null;
   next: UnifiedEpgProgram | null;
 }
@@ -28,14 +31,20 @@ export class SQLiteEpgDB {
   private static instance: SQLiteEpgDB | null = null;
   private db: DatabaseSync;
 
-  private constructor() {
-    if (!fs.existsSync(DB_DIR)) {
-      fs.mkdirSync(DB_DIR, { recursive: true, mode: 0o700 });
+  public constructor(customPath?: string) {
+    const targetFile = customPath || DB_FILE;
+    if (targetFile !== ':memory:') {
+      const dir = path.dirname(targetFile);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+      }
     }
 
-    this.db = new DatabaseSync(DB_FILE);
+    this.db = new DatabaseSync(targetFile);
     this.initSchema();
-    this.seedSampleEpgIfEmpty();
+    if (targetFile !== ':memory:') {
+      this.seedSampleEpgIfEmpty();
+    }
   }
 
   public static getInstance(): SQLiteEpgDB {
@@ -213,23 +222,44 @@ export class SQLiteEpgDB {
     this.db.exec('BEGIN TRANSACTION;');
     try {
       for (const p of programmes) {
-        const startSec = p.startTimestampSec || Math.floor(p.start.getTime() / 1000);
-        const stopSec = p.stopTimestampSec || Math.floor(p.stop.getTime() / 1000);
-        const durationMin = p.durationMinutes || Math.max(1, Math.round((stopSec - startSec) / 60));
-        const id = p.id || `prog_${p.channelId}_${startSec}`;
+        const anyP = p as any;
+        const startSec =
+          anyP.startTimeEpoch !== undefined
+            ? Number(anyP.startTimeEpoch)
+            : anyP.startTimestampSec !== undefined
+            ? Number(anyP.startTimestampSec)
+            : anyP.start instanceof Date
+            ? Math.floor(anyP.start.getTime() / 1000)
+            : typeof anyP.start === 'string'
+            ? Math.floor(new Date(anyP.start).getTime() / 1000)
+            : 0;
+
+        const stopSec =
+          anyP.stopTimeEpoch !== undefined
+            ? Number(anyP.stopTimeEpoch)
+            : anyP.stopTimestampSec !== undefined
+            ? Number(anyP.stopTimestampSec)
+            : anyP.stop instanceof Date
+            ? Math.floor(anyP.stop.getTime() / 1000)
+            : typeof anyP.stop === 'string'
+            ? Math.floor(new Date(anyP.stop).getTime() / 1000)
+            : startSec + 1800;
+
+        const durationMin = anyP.durationMinutes || Math.max(1, Math.round((stopSec - startSec) / 60));
+        const id = anyP.id || `prog_${anyP.channelId}_${startSec}`;
 
         stmt.run(
           id,
-          p.channelId,
-          p.title || 'Untitled Program',
-          p.subTitle ?? null,
-          p.description ?? null,
-          p.category ?? 'General',
+          anyP.channelId,
+          anyP.title || 'Untitled Program',
+          anyP.subTitle ?? anyP.subtitle ?? null,
+          anyP.description ?? anyP.desc ?? null,
+          anyP.category ?? 'General',
           startSec,
           stopSec,
           durationMin,
-          p.starRating ?? null,
-          p.hasCatchupArchive ? 1 : 0
+          anyP.starRating ?? anyP.rating ?? null,
+          anyP.hasCatchupArchive || anyP.hasCatchup ? 1 : 0
         );
       }
       this.db.exec('COMMIT;');
@@ -291,25 +321,32 @@ export class SQLiteEpgDB {
       let matchType = 'UNMATCHED';
       let matchScore = 0;
 
+      let nowProg: UnifiedEpgProgram | null = null;
+      let nextProg: UnifiedEpgProgram | null = null;
+      let isUncertain = false;
+      let flaggedCandidateName: string | undefined = undefined;
+      let reviewReason: string | undefined = undefined;
+
       // 1. Check existing stored mapping
       if (storedMappings[chKey]) {
         xmltvId = storedMappings[chKey].xmltv_channel_id;
         matchType = storedMappings[chKey].match_type;
         matchScore = Number(storedMappings[chKey].match_score);
+        isUncertain = matchType === 'UNCERTAIN_FUZZY';
       } else {
         // 2. Perform fuzzy match on-the-fly
         const match = matchChannelToXmltv(ch, xmltvCandidates);
         xmltvId = match.xmltvChannelId;
         matchType = match.matchType;
         matchScore = match.matchScore;
+        isUncertain = match.isUncertain ?? false;
+        flaggedCandidateName = match.flaggedCandidateName;
+        reviewReason = match.reviewReason;
 
         if (match.isMatched && xmltvId) {
           this.saveMapping(match);
         }
       }
-
-      let nowProg: UnifiedEpgProgram | null = null;
-      let nextProg: UnifiedEpgProgram | null = null;
 
       if (xmltvId) {
         const { now, next } = this.getNowAndNext(xmltvId, target);
@@ -323,6 +360,9 @@ export class SQLiteEpgDB {
         hasEpgData: Boolean(nowProg || nextProg),
         matchType,
         matchScore,
+        isUncertain,
+        flaggedCandidateName,
+        reviewReason,
         now: nowProg,
         next: nextProg,
       });
@@ -476,6 +516,38 @@ export class SQLiteEpgDB {
       totalChannels: channels.length,
       channels: resultChannels,
     };
+  }
+
+  /**
+   * Retrieves specific programme details by unique ID
+   */
+  public getProgramById(programId: string): UnifiedEpgProgram | null {
+    const stmt = this.db.prepare(`
+      SELECT * FROM epg_programmes
+      WHERE id = ?
+      LIMIT 1
+    `);
+    const row = stmt.get(programId) as any;
+    if (!row) return null;
+    const nowSec = Math.floor(Date.now() / 1000);
+    return this.mapRowToProgram(row, nowSec);
+  }
+
+  /**
+   * Searches programmes by title or description
+   */
+  public searchProgrammes(query: string, limit: number = 50): UnifiedEpgProgram[] {
+    if (!query || !query.trim()) return [];
+    const stmt = this.db.prepare(`
+      SELECT * FROM epg_programmes
+      WHERE title LIKE ? OR description LIKE ? OR category LIKE ?
+      ORDER BY start_time_epoch ASC
+      LIMIT ?
+    `);
+    const qParam = `%${query.trim()}%`;
+    const rows = stmt.all(qParam, qParam, qParam, limit) as any[];
+    const nowSec = Math.floor(Date.now() / 1000);
+    return rows.map((r) => this.mapRowToProgram(r, nowSec));
   }
 
   public getStats(): {
@@ -861,7 +933,7 @@ export class SQLiteEpgDB {
     limit?: number;
     offset?: number;
   } = {}): any[] {
-    const limit = Math.min(200, Math.max(1, options.limit || 50));
+    const limit = Math.min(50000, Math.max(1, options.limit || 50));
     const offset = Math.max(0, options.offset || 0);
 
     let query = `SELECT * FROM iptv_channels WHERE 1=1`;
@@ -887,6 +959,20 @@ export class SQLiteEpgDB {
 
     const stmt = this.db.prepare(query);
     return stmt.all(...params) as any[];
+  }
+
+  /**
+   * Fetch single live channel record by streamId
+   */
+  public getLiveChannel(streamId: number | string): any | null {
+    const numId = Number(streamId);
+    const stmt = this.db.prepare(`
+      SELECT * FROM iptv_channels 
+      WHERE stream_id = ? OR id = ? OR id = ?
+      LIMIT 1;
+    `);
+    const row = stmt.get(numId, String(streamId), `stream_${streamId}`) as any;
+    return row || null;
   }
 
   /**
@@ -918,6 +1004,15 @@ export class SQLiteEpgDB {
     const stmt = this.db.prepare(query);
     const row = stmt.get(...params) as any;
     return row ? Number(row.count) : 0;
+  }
+
+  /**
+   * Closes the underlying SQLite database connection
+   */
+  public close(): void {
+    if (this.db && typeof (this.db as any).close === 'function') {
+      (this.db as any).close();
+    }
   }
 }
 

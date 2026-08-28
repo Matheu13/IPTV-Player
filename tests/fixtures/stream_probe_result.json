@@ -1,10 +1,10 @@
 {
   "timestamp": "2026-08-25T17:18:41.200Z",
-  "target_url": "http://provider.panel-stream.net:8080/live/pr%E2%80%A6b303/p1%E2%80%A6229c/10452.ts",
+  "target_url": "http://provider.panel-stream.net:8080/live/pr%E2%80%A6b053/p1%E2%80%A6cf5b/10452.ts",
   "probed_formats": [
     {
       "format": "ts",
-      "url": "http://provider.panel-stream.net:8080/live/pr%E2%80%A6b303/p1%E2%80%A6229c/10452.ts",
+      "url": "http://provider.panel-stream.net:8080/live/pr%E2%80%A6b053/p1%E2%80%A6cf5b/10452.ts",
       "headStatus": 405,
       "headContentType": null,
       "headMethodUsed": "GET_RANGE_FALLBACK",
@@ -26,7 +26,7 @@
     },
     {
       "format": "m3u8",
-      "url": "http://provider.panel-stream.net:8080/live/pr%E2%80%A6b303/p1%E2%80%A6229c/10452.m3u8",
+      "url": "http://provider.panel-stream.net:8080/live/pr%E2%80%A6b053/p1%E2%80%A6cf5b/10452.m3u8",
       "headStatus": 200,
       "headContentType": "application/vnd.apple.mpegurl",
       "headMethodUsed": "HEAD",

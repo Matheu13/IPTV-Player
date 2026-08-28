@@ -8,7 +8,7 @@
 
 import { ForensicWatermarkEngine } from '../src/lib/forensicWatermarkEngine';
 
-async function runCliTests() {
+export async function runMilestone27TestSuite() {
   console.log('================== MILESTONE 27 AUTOMATED TEST SUITE ==================');
   let passedCount = 0;
   let failedCount = 0;
@@ -94,12 +94,16 @@ async function runCliTests() {
   console.log('=======================================================================');
   console.log(`Total Assertions: ${passedCount + failedCount} | Passed: ${passedCount} | Failed: ${failedCount}`);
 
-  if (failedCount > 0) {
-    process.exit(1);
-  }
+  return {
+    milestone: 'Milestone 27 - Forensic Watermarking & Dynamic Splicing',
+    total: passedCount + failedCount,
+    passed: passedCount,
+    failed: failedCount,
+  };
 }
 
-runCliTests().catch((err) => {
-  console.error('Fatal test error:', err);
-  process.exit(1);
-});
+if (import.meta.url === `file://${process.argv[1]}`) {
+  runMilestone27TestSuite().then((res) => {
+    if (res.failed > 0) process.exit(1);
+  });
+}

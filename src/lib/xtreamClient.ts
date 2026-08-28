@@ -241,7 +241,7 @@ export class XtreamClient {
   /**
    * Fetches live streams, applies the URL policy, and maps them to categories.
    */
-  public async getLiveStreams(categories: UnifiedCategory[]): Promise<UnifiedChannel[]> {
+  public async getLiveStreams(categories: UnifiedCategory[] = []): Promise<UnifiedChannel[]> {
     const url = `${this.config.baseUrl}/player_api.php?username=${encodeURIComponent(
       this.config.username
     )}&password=${encodeURIComponent(this.config.password)}&action=get_live_streams`;
@@ -252,8 +252,8 @@ export class XtreamClient {
     }
 
     const catMap = new Map<string, UnifiedCategory>();
-    categories.forEach((cat) => catMap.set(cat.id, cat));
-    const fallbackCategory = categories.find((c) => c.isSyntheticFallback);
+    (categories || []).forEach((cat) => catMap.set(cat.id, cat));
+    const fallbackCategory = (categories || []).find((c) => c.isSyntheticFallback);
 
     const channels: UnifiedChannel[] = rawStreams.map((s, idx) => {
       const streamId = s.stream_id || s.id || idx + 1;

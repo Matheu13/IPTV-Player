@@ -17,9 +17,12 @@ export interface EpgMatchResult {
   tvgId?: string;
   xmltvChannelId: string | null;
   xmltvDisplayName: string | null;
-  matchType: 'EXACT_TVG_ID' | 'NORMALIZED_NAME' | 'FUZZY_TOKEN' | 'MANUAL' | 'UNMATCHED';
+  matchType: 'EXACT_TVG_ID' | 'EXACT_PROVIDER_ID' | 'NORMALIZED_NAME' | 'FUZZY_TOKEN' | 'UNCERTAIN_FUZZY' | 'MANUAL' | 'UNMATCHED';
   matchScore: number;
   isMatched: boolean;
+  isUncertain?: boolean;
+  flaggedCandidateId?: string;
+  flaggedCandidateName?: string;
   needsManualReview?: boolean;
   reviewReason?: string;
 }
@@ -28,6 +31,8 @@ export interface MatchCandidate {
   id: string;
   displayName: string;
   iconSrc?: string;
+  tvgId?: string;
+  providerChannelId?: string | number;
 }
 
 /**
@@ -38,19 +43,27 @@ export function normalizeChannelName(name: string): string {
   if (!name) return '';
   let cleaned = name.trim().toLowerCase();
 
-  // 1. Strip country / regional prefixes (e.g. "US:", "UK:", "CA:", "FR:", "DE:", "[US]", "(UK)")
+  // 1. Strip country / regional prefixes (e.g. "|UK|", "[US]", "(UK)", "UK:", "US - ")
+  cleaned = cleaned.replace(/^[|\[(]*(us|uk|ca|fr|de|es|it|nl|pt|au|nz|mx|br|ar|latam)[|)\]\s|:_-]+/gi, '');
   cleaned = cleaned.replace(/^(us|uk|ca|fr|de|es|it|nl|pt|au|nz|mx|br|ar|latam|ar:|mx:)[|:_\-\s]+/gi, '');
   cleaned = cleaned.replace(/^\[(us|uk|ca|fr|de|es|it|nl|pt|au|nz|mx|br)\]\s*/gi, '');
   cleaned = cleaned.replace(/^\((us|uk|ca|fr|de|es|it|nl|pt|au|nz|mx|br)\)\s*/gi, '');
 
   // 2. Strip quality / format / codec / framerate suffixes
-  cleaned = cleaned.replace(/\b(4k|uhd|fhd|hd|sd|hevc|h265|h264|1080p|720p|50fps|60fps|raw|vip|premium|backup|alt)\b/gi, '');
+  cleaned = cleaned.replace(/\b(4k|uhd|fhd|hd|sd|hevc|h265|h264|1080p|720p|50fps|60fps|raw|vip|premium|backup|alt|highdef|hi\s*def)\b/gi, '');
 
   // 3. Strip timeshift suffixes (e.g. "+1", "+2", "+24", "east", "west")
   cleaned = cleaned.replace(/\s*\+\d+\b/g, '');
   cleaned = cleaned.replace(/\b(east|west|pacific|central)\b/gi, '');
 
-  // 4. Remove special characters and redundant spaces
+  // 4. Expand common broadcast abbreviations for consistent comparison
+  cleaned = cleaned
+    .replace(/\b(intl|internatnl|intnl)\b/gi, 'international')
+    .replace(/\b(docu|doc)\b/gi, 'documentary')
+    .replace(/\b(ent|entmt)\b/gi, 'entertainment')
+    .replace(/\b(spts|sport)\b/gi, 'sports');
+
+  // 5. Remove special characters and redundant spaces
   cleaned = cleaned.replace(/[^\w\s]/g, ' ');
   cleaned = cleaned.replace(/\s+/g, ' ').trim();
 
@@ -104,9 +117,12 @@ export function calculateTokenSimilarity(str1: string, str2: string): number {
     if (set2.has(t1)) {
       matchedWeight += 1.0;
     } else {
-      // Check prefix / abbreviation match (e.g. "int" -> "international", "doc" -> "documentary", "ent" -> "entertainment")
+      // Check prefix / abbreviation match or high string similarity
       const prefixMatch = tokens2.some(
-        (t2) => (t1.length >= 3 && t2.startsWith(t1)) || (t2.length >= 3 && t1.startsWith(t2))
+        (t2) =>
+          (t1.length >= 3 && t2.startsWith(t1)) ||
+          (t2.length >= 3 && t1.startsWith(t2)) ||
+          calculateStringSimilarity(t1, t2) >= 0.70
       );
       if (prefixMatch) {
         matchedWeight += 0.85;
@@ -115,7 +131,9 @@ export function calculateTokenSimilarity(str1: string, str2: string): number {
   }
 
   const maxLen = Math.max(tokens1.length, tokens2.length);
-  return maxLen > 0 ? Math.min(1.0, matchedWeight / maxLen) : 0;
+  const minLen = Math.min(tokens1.length, tokens2.length);
+  // Average between coverage of source and coverage of target
+  return maxLen > 0 ? Math.min(1.0, (matchedWeight / maxLen + matchedWeight / minLen) / 2) : 0;
 }
 
 /**
@@ -130,7 +148,7 @@ export function matchChannelToXmltv(
   },
   candidates: MatchCandidate[],
   manualOverrides: Record<string, string> = {},
-  threshold = 0.60
+  threshold = 0.45
 ): EpgMatchResult {
   const channelKey = String(channel.id);
   const tvgId = channel.tvgId || channel.epgChannelId;
@@ -154,7 +172,7 @@ export function matchChannelToXmltv(
   // 2. Exact match on tvg-id / epgChannelId
   if (tvgId) {
     const exactTvg = candidates.find(
-      (c) => c.id.toLowerCase() === tvgId.toLowerCase()
+      (c) => c.id.toLowerCase() === tvgId.toLowerCase() || (c.tvgId && c.tvgId.toLowerCase() === tvgId.toLowerCase())
     );
     if (exactTvg) {
       return {
@@ -166,13 +184,40 @@ export function matchChannelToXmltv(
         matchType: 'EXACT_TVG_ID',
         matchScore: 1.0,
         isMatched: true,
+        isUncertain: false,
       };
     }
   }
 
+  // 3. Exact match on Provider Channel ID where applicable
+  const providerChanId = String(channel.id);
+  const streamIdStr = String((channel as any).streamId || (channel as any).stream_id || '');
+  const exactProvider = candidates.find((c) => {
+    const candId = String(c.id);
+    const candProvId = c.providerChannelId ? String(c.providerChannelId) : null;
+    return (
+      candId === providerChanId ||
+      (candProvId && candProvId === providerChanId) ||
+      (streamIdStr && (candId === streamIdStr || candProvId === streamIdStr))
+    );
+  });
+  if (exactProvider) {
+    return {
+      channelId: channel.id,
+      channelName: channel.name,
+      tvgId,
+      xmltvChannelId: exactProvider.id,
+      xmltvDisplayName: exactProvider.displayName,
+      matchType: 'EXACT_PROVIDER_ID',
+      matchScore: 1.0,
+      isMatched: true,
+      isUncertain: false,
+    };
+  }
+
   const cleanChannelName = normalizeChannelName(channel.name);
 
-  // 3. Exact match on normalized display name or channel name
+  // 4. Exact match on normalized display name or channel name
   const exactNorm = candidates.find(
     (c) =>
       normalizeChannelName(c.displayName) === cleanChannelName ||
@@ -188,12 +233,13 @@ export function matchChannelToXmltv(
       matchType: 'NORMALIZED_NAME',
       matchScore: 0.95,
       isMatched: true,
+      isUncertain: false,
     };
   }
 
-  // 4. Token & Bigram Fuzzy Matching
-  let bestCandidate: MatchCandidate | null = null;
-  let bestScore = 0;
+  // 5. Token & Bigram Fuzzy Matching with Uncertainty Check
+  // Evaluates candidate similarities and ranks top candidates
+  const candidateScores: Array<{ candidate: MatchCandidate; score: number }> = [];
 
   for (const cand of candidates) {
     const cleanCandName = normalizeChannelName(cand.displayName);
@@ -212,35 +258,65 @@ export function matchChannelToXmltv(
     const bestTokSim = Math.max(tokName, tokId);
     const combinedScore = Math.max(bestTokSim, bestCharSim, bestCharSim * 0.5 + bestTokSim * 0.5);
 
-    if (combinedScore > bestScore) {
-      bestScore = combinedScore;
-      bestCandidate = cand;
+    if (combinedScore >= 0.35) {
+      candidateScores.push({ candidate: cand, score: combinedScore });
     }
   }
 
-  if (bestCandidate && bestScore >= threshold) {
-    const roundedScore = Math.round(bestScore * 100) / 100;
-    const CONFIDENCE_REVIEW_THRESHOLD = 0.80;
-    const needsReview = roundedScore < CONFIDENCE_REVIEW_THRESHOLD;
+  // Sort descending by score
+  candidateScores.sort((a, b) => b.score - a.score);
 
-    return {
-      channelId: channel.id,
-      channelName: channel.name,
-      tvgId,
-      xmltvChannelId: bestCandidate.id,
-      xmltvDisplayName: bestCandidate.displayName,
-      matchType: 'FUZZY_TOKEN',
-      matchScore: roundedScore,
-      isMatched: true,
-      needsManualReview: needsReview,
-      reviewReason: needsReview
-        ? `Confidence score (${Math.round(roundedScore * 100)}%) is below auto-approve threshold (80%). Pending user review.`
-        : undefined,
-    };
+  if (candidateScores.length > 0) {
+    const best = candidateScores[0];
+    const secondBest = candidateScores.length > 1 ? candidateScores[1] : null;
+    const roundedScore = Math.round(best.score * 100) / 100;
+
+    const HIGH_CONFIDENCE_THRESHOLD = 0.82;
+    const UNCERTAINTY_GAP_THRESHOLD = 0.05;
+
+    // Check if score is high confidence and distinct from 2nd candidate
+    const isAmbiguous = secondBest && Math.abs(best.score - secondBest.score) < UNCERTAINTY_GAP_THRESHOLD;
+    const isHighConfidence = roundedScore >= HIGH_CONFIDENCE_THRESHOLD && !isAmbiguous;
+
+    if (isHighConfidence) {
+      // Confident match: bind EPG safely
+      return {
+        channelId: channel.id,
+        channelName: channel.name,
+        tvgId,
+        xmltvChannelId: best.candidate.id,
+        xmltvDisplayName: best.candidate.displayName,
+        matchType: 'FUZZY_TOKEN',
+        matchScore: roundedScore,
+        isMatched: true,
+        isUncertain: false,
+      };
+    } else if (roundedScore >= threshold) {
+      // UNCERTAIN MATCH:
+      // Requirement: If fuzzy matching is uncertain, preserve the channel and flag the match
+      // rather than silently associating incorrect EPG data.
+      return {
+        channelId: channel.id,
+        channelName: channel.name,
+        tvgId,
+        xmltvChannelId: null, // DO NOT silently bind incorrect EPG
+        xmltvDisplayName: null,
+        flaggedCandidateId: best.candidate.id,
+        flaggedCandidateName: best.candidate.displayName,
+        matchType: 'UNCERTAIN_FUZZY',
+        matchScore: roundedScore,
+        isMatched: false,
+        isUncertain: true,
+        needsManualReview: true,
+        reviewReason: isAmbiguous
+          ? `Ambiguous fuzzy match: "${best.candidate.displayName}" (${Math.round(best.score * 100)}%) vs "${secondBest?.candidate.displayName}" (${Math.round((secondBest?.score || 0) * 100)}%). Preserved without binding.`
+          : `Uncertain fuzzy match confidence (${Math.round(roundedScore * 100)}% with "${best.candidate.displayName}"). Preserved channel without silently binding incorrect EPG.`,
+      };
+    }
   }
 
-  // 5. UNMATCHED FALLBACK
-  // CRITICAL REQUIREMENT: Show unmatched channels rather than hiding them!
+  // 6. UNMATCHED FALLBACK
+  // Requirement: Do not automatically hide unmatched channels. Show "No EPG available".
   return {
     channelId: channel.id,
     channelName: channel.name,
@@ -250,6 +326,7 @@ export function matchChannelToXmltv(
     matchType: 'UNMATCHED',
     matchScore: 0.0,
     isMatched: false,
+    isUncertain: false,
     needsManualReview: true,
     reviewReason: 'No matching XMLTV program guide channel identified in ingest database.',
   };
@@ -263,7 +340,7 @@ export function batchMatchChannelsToXmltv(
   channels: Array<{ id: string | number; name: string; tvgId?: string; epgChannelId?: string }>,
   candidates: MatchCandidate[],
   manualOverrides: Record<string, string> = {},
-  threshold = 0.60
+  threshold = 0.45
 ): EpgMatchResult[] {
   return channels.map((ch) => matchChannelToXmltv(ch, candidates, manualOverrides, threshold));
 }

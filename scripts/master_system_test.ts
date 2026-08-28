@@ -1,0 +1,92 @@
+/**
+ * Master Comprehensive System Test Runner
+ * Runs all milestone test suites from M0 to M30 + UI requirements
+ */
+
+import { runMilestone0Diagnosis } from './milestone0_diagnose';
+import { runMilestone1TestSuite } from './milestone1_tests';
+import { runMilestone2TestSuite } from './milestone2_tests';
+import { runMilestone3TestSuite } from './milestone3_tests';
+import { runMilestone4TestSuite } from './milestone4_tests';
+import { runMilestone5TestSuite } from './milestone5_tests';
+import { runMilestones6To10TestSuite } from './milestones_6_to_10_tests';
+import { runMilestones11To14TestSuite } from './milestones_11_to_14_tests';
+import { runMilestones16To18TestSuite } from './milestones_16_to_18_tests';
+import { runMilestones19To20TestSuite } from './milestones_19_to_20_tests';
+import { runMilestones21To23TestSuite } from './milestones_21_to_23_tests';
+import { runMilestones24To26TestSuite } from './milestones_24_to_26_tests';
+import { runMilestone27TestSuite } from './milestone_27_tests';
+import { runMilestone28TestSuite } from './milestone_28_tests';
+import { runMilestone29TestSuite } from './milestone_29_tests';
+import { runMilestone30TestSuite } from './milestone_30_tests';
+import { runMilestoneUiRequirementsTestSuite } from './milestone_ui_requirements_tests';
+
+export async function runAllSystemTests() {
+  console.log('========================================================================');
+  console.log('🚀 EXECUTING COMPREHENSIVE END-TO-END SYSTEM TEST SUITE (M0 -> M30)');
+  console.log('========================================================================\n');
+
+  const suites = [
+    { name: 'M0: Diagnostic Baseline', fn: runMilestone0Diagnosis },
+    { name: 'M1: Architecture Baseline', fn: runMilestone1TestSuite },
+    { name: 'M2: Resilience & Fallbacks', fn: runMilestone2TestSuite },
+    { name: 'M3: Stream Parsing & Buffers', fn: runMilestone3TestSuite },
+    { name: 'M4: EPG & SQLite DB', fn: runMilestone4TestSuite },
+    { name: 'M5: DVR & Timeshift Engine', fn: runMilestone5TestSuite },
+    { name: 'M6-M10: Stalker, Catchup, Multi-CDN, Subtitles, Teletext', fn: runMilestones6To10TestSuite },
+    { name: 'M11-M14: VOD, Audio Normalization, Multi-Audio, DRM', fn: runMilestones11To14TestSuite },
+    { name: 'M16-M18: PIP, Channel Zapping, Analytics', fn: runMilestones16To18TestSuite },
+    { name: 'M19-M20: Stalker MAG Portal & 10-Foot Spatial Nav', fn: runMilestones19To20TestSuite },
+    { name: 'M21-M23: Low-Latency CMAF, AI Highlights, P2P Swarm', fn: runMilestones21To23TestSuite },
+    { name: 'M24-M26: SCTE-35 DAI, Multi-Room PTP Sync, Hybrid RF Frontend', fn: runMilestones24To26TestSuite },
+    { name: 'M27: Forensic Watermarking & Dynamic Splicing', fn: runMilestone27TestSuite },
+    { name: 'M28: Spatial Audio & MPEG-H 3D Object Rendering', fn: runMilestone28TestSuite },
+    { name: 'M29: Favorites & Watch History Resilience', fn: runMilestone29TestSuite },
+    { name: 'M30: Large-Scale XMLTV Streaming & Indexed Guide', fn: runMilestone30TestSuite },
+    { name: 'UI Requirements: Virtualization & 10,000+ Channel Matrix', fn: runMilestoneUiRequirementsTestSuite },
+  ];
+
+  let totalPassed = 0;
+  let totalFailed = 0;
+  const suiteResults: Array<{ name: string; total: number; passed: number; failed: number }> = [];
+
+  for (const suite of suites) {
+    try {
+      console.log(`\n▶ Running [${suite.name}]...`);
+      const res = await suite.fn();
+      const passed = res.passed ?? 0;
+      const failed = res.failed ?? 0;
+      const total = res.total ?? (passed + failed);
+      totalPassed += passed;
+      totalFailed += failed;
+      suiteResults.push({ name: suite.name, total, passed, failed });
+    } catch (err: any) {
+      console.error(`❌ Suite Failed with exception: [${suite.name}]:`, err.message);
+      totalFailed += 1;
+      suiteResults.push({ name: suite.name, total: 1, passed: 0, failed: 1 });
+    }
+  }
+
+  console.log('\n========================================================================');
+  console.log('🏁 SYSTEM-WIDE AUDIT SUMMARY REPORT');
+  console.log('========================================================================');
+  for (const res of suiteResults) {
+    const status = res.failed === 0 ? '\x1b[32m[PASS]\x1b[0m' : '\x1b[31m[FAIL]\x1b[0m';
+    console.log(`${status} ${res.name.padEnd(65)} (${res.passed}/${res.total})`);
+  }
+  console.log('------------------------------------------------------------------------');
+  console.log(`OVERALL ASSERTIONS: ${totalPassed + totalFailed} | PASSED: ${totalPassed} | FAILED: ${totalFailed}`);
+  console.log('========================================================================\n');
+
+  return {
+    totalPassed,
+    totalFailed,
+    suiteResults,
+  };
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  runAllSystemTests().then((res) => {
+    if (res.totalFailed > 0) process.exit(1);
+  });
+}

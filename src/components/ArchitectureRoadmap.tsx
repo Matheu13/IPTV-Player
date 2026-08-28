@@ -1,5 +1,5 @@
 import React from 'react';
-import { Cpu, ShieldAlert, Database, Layers, Radio, CheckCircle2, Tv, Sliders, Zap, Calendar, Film, Gamepad2, Heart, Clock, HardDrive, Activity, Tag, Cast, Key, Fingerprint } from 'lucide-react';
+import { Cpu, ShieldAlert, Database, Layers, Radio, CheckCircle2, Tv, Sliders, Zap, Calendar, Film, Gamepad2, Heart, Clock, HardDrive, Activity, Tag, Cast, Key, Fingerprint, Headphones } from 'lucide-react';
 
 export const ArchitectureRoadmap: React.FC = () => {
   return (
@@ -74,6 +74,64 @@ export const ArchitectureRoadmap: React.FC = () => {
             <span className="px-2.5 py-0.5 bg-rose-950 text-rose-300 border border-rose-800 rounded-full text-xs font-mono font-semibold">
               M27: Forensic Watermarking ✓
             </span>
+            <span className="px-2.5 py-0.5 bg-indigo-950 text-indigo-300 border border-indigo-800 rounded-full text-xs font-mono font-semibold">
+              M28: Spatial Audio &amp; MPEG-H ✓
+            </span>
+            <span className="px-2.5 py-0.5 bg-sky-950 text-sky-300 border border-sky-800 rounded-full text-xs font-mono font-semibold">
+              UI: 10k+ Virtualized Player ✓
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* UI Requirements Spec Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div id="ui-spec-card" className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3 md:col-span-3">
+          <div className="flex items-center gap-2 text-sky-400 font-bold text-sm">
+            <Tv className="w-4 h-4" />
+            <span>Unified IPTV Player &amp; 10,000+ Channel Virtualization Architecture</span>
+          </div>
+          <p className="text-xs text-slate-400 leading-relaxed">
+            Production-grade unified IPTV player with 10,000+ virtualized channel dataset (&lt;1ms window slicing), multi-field indexed search (Channel name, Category, Source, tvg-id), lazy-loaded resilient logo rendering with zero layout-shift fallbacks, EPG Now/Next timeline schedule engine, multi-source manager (Xtream Codes, M3U8, Stalker Portal, HDHomeRun RF), playback screen with live stream OSD, settings modal, and real-time telemetry diagnostics.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-1">
+            <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800 text-[11px] text-slate-300 font-mono">
+              • 10,000+ virtualized rows
+            </div>
+            <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800 text-[11px] text-slate-300 font-mono">
+              • Tokenized multi-field search
+            </div>
+            <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800 text-[11px] text-slate-300 font-mono">
+              • Non-blocking logo fallbacks
+            </div>
+            <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800 text-[11px] text-slate-300 font-mono">
+              • EPG Now/Next &amp; Diagnostics
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Milestone 28 Architecture Spec Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* M28: Spatial Audio */}
+        <div id="m28-spec-card" className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3 md:col-span-3">
+          <div className="flex items-center gap-2 text-indigo-400 font-bold text-sm">
+            <Headphones className="w-4 h-4" />
+            <span>Milestone 28: Spatial Audio &amp; MPEG-H / Dolby Atmos 3D Object Renderer</span>
+          </div>
+          <p className="text-xs text-slate-400 leading-relaxed">
+            Next-generation 7.1.4 object-based audio bed and ADM/MPEG-H metadata parser, real-time binaural HRTF headphone virtualizer, ClearVoice dialogue clarity isolation (+0dB to +12dB), dynamic gyro head tracking orientation (Yaw/Pitch/Roll), interactive multi-track personalization (Home/Away Commentary, Ambient Only), and EBU R128 (-24 LUFS) broadcast loudness meter.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+            <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800 text-[11px] text-slate-300 font-mono">
+              • 7.1.4 bed + dynamic 3D objects
+            </div>
+            <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800 text-[11px] text-slate-300 font-mono">
+              • Binaural HRTF &amp; gyro head tracking
+            </div>
+            <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800 text-[11px] text-slate-300 font-mono">
+              • ClearVoice dialogue boost &amp; EBU R128
+            </div>
           </div>
         </div>
       </div>

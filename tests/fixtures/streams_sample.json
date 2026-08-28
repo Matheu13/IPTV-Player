@@ -1,7 +1,7 @@
 [
   {
     "num": 1,
-    "name": "us: ESPN HD (60FPS)",
+    "name": "US: ESPN HD (60FPS)",
     "stream_type": "live",
     "stream_id": 10452,
     "stream_icon": "https://img.provider-cdn.com/icons/espn.png",
@@ -15,7 +15,7 @@
   },
   {
     "num": 2,
-    "name": "us: CNN INTERNATIONAL",
+    "name": "US: CNN INTERNATIONAL",
     "stream_type": "live",
     "stream_id": 10453,
     "stream_icon": "https://img.provider-cdn.com/icons/cnn.png",
@@ -29,7 +29,7 @@
   },
   {
     "num": 3,
-    "name": "uk: BBC ONE HD",
+    "name": "UK: BBC ONE HD",
     "stream_type": "live",
     "stream_id": 10454,
     "stream_icon": "https://img.provider-cdn.com/icons/bbcone.png",

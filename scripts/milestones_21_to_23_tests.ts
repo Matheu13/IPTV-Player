@@ -64,7 +64,8 @@ async function runTestCase(
   }
 }
 
-async function runSuite() {
+export async function runMilestones21To23TestSuite() {
+  results.length = 0;
   console.log('\n================== MILESTONES 21, 22 & 23 AUTOMATED TEST SUITE ==================\n');
 
   // -------------------------------------------------------------
@@ -242,14 +243,16 @@ async function runSuite() {
   const failed = results.filter((r) => !r.passed).length;
   console.log(`Total Assertions: ${results.length} | Passed: ${passed} | Failed: ${failed}\n`);
 
-  if (failed > 0) {
-    process.exit(1);
-  } else {
-    process.exit(0);
-  }
+  return {
+    milestone: 'Milestones 21-23 - Low-Latency CMAF, AI Highlights, P2P Swarm',
+    total: results.length,
+    passed,
+    failed,
+  };
 }
 
-runSuite().catch((err) => {
-  console.error('Test Suite execution failed:', err);
-  process.exit(1);
-});
+if (import.meta.url === `file://${process.argv[1]}`) {
+  runMilestones21To23TestSuite().then((res) => {
+    if (res.failed > 0) process.exit(1);
+  });
+}

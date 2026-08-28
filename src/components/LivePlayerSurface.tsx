@@ -47,7 +47,7 @@ const SAMPLE_CHANNELS = [
     name: 'US: CNN International HD',
     category: 'US | NEWS',
     format: 'm3u8' as const,
-    streamUrl: 'https://bitdash-a.akamaihd.net/content/sintel/hls/playlist.m3u8',
+    streamUrl: 'https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8',
     tvgId: 'CNN.us',
     currentShow: 'World News Headlines & Financial Markets',
     nextShow: 'Anderson Cooper 360',
@@ -60,7 +60,7 @@ const SAMPLE_CHANNELS = [
     name: 'UK: BBC One London HD',
     category: 'UK | ENTERTAINMENT',
     format: 'm3u8' as const,
-    streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+    streamUrl: 'https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_16x9/bipbop_16x9_variant.m3u8',
     tvgId: 'BBCOne.uk',
     currentShow: 'Planet Earth: Nature Special',
     nextShow: 'BBC News at Ten',
@@ -86,7 +86,7 @@ const SAMPLE_CHANNELS = [
     name: 'UK: Sky Sports F1 UHD',
     category: 'UK | SPORTS',
     format: 'm3u8' as const,
-    streamUrl: 'https://bitdash-a.akamaihd.net/content/sintel/hls/playlist.m3u8',
+    streamUrl: 'https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8',
     tvgId: 'SkySportsF1.uk',
     currentShow: 'Formula 1: Qualifying Session LIVE',
     nextShow: 'Ted\'s Qualifying Notebook',
@@ -275,6 +275,19 @@ export const LivePlayerSurface: React.FC = () => {
   }, []);
 
   // Handle HLS / MPEG-TS / Video Attachment
+  // Helper to ensure streams avoid Mixed Content and CORS issues
+  const resolveProxiedUrl = (url: string | undefined): string => {
+    if (!url) return '';
+    if (url.startsWith('/api/') || url.startsWith('blob:')) return url;
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      const isPublicCors = url.includes('mux.dev') || url.includes('akamaihd.net') || url.includes('googleapis.com');
+      if (!isPublicCors || url.startsWith('http://')) {
+        return `/api/stream/proxy?url=${encodeURIComponent(url)}`;
+      }
+    }
+    return url;
+  };
+
   useEffect(() => {
     if (!videoRef.current) return;
 
@@ -290,13 +303,14 @@ export const LivePlayerSurface: React.FC = () => {
 
     if (engineState.isPlaying && selectedChannel) {
       setPlaybackError(null);
-      const urlToPlay =
+      const rawUrl =
         activeFormat === 'ts' && selectedChannel.tsStreamUrl
           ? selectedChannel.tsStreamUrl
           : selectedChannel.streamUrl;
+      const urlToPlay = resolveProxiedUrl(rawUrl);
 
-      const isMpegTs = urlToPlay.endsWith('.ts') || activeFormat === 'ts';
-      const isHls = urlToPlay.includes('.m3u8') || activeFormat === 'm3u8';
+      const isMpegTs = urlToPlay.endsWith('.ts') || rawUrl.endsWith('.ts') || activeFormat === 'ts';
+      const isHls = urlToPlay.includes('.m3u8') || rawUrl.includes('.m3u8') || activeFormat === 'm3u8';
 
       if (isMpegTs && mpegts.isSupported()) {
         try {

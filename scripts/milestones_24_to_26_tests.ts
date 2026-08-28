@@ -12,7 +12,7 @@ import { Scte35DaiEngine } from '../src/lib/scte35DaiEngine';
 import { MultiRoomCastEngine } from '../src/lib/multiRoomCastEngine';
 import { HybridRfTunerEngine } from '../src/lib/hybridRfTunerEngine';
 
-async function runCliTests() {
+export async function runMilestones24To26TestSuite() {
   console.log('================== MILESTONES 24, 25 & 26 AUTOMATED TEST SUITE ==================');
   let passedCount = 0;
   let failedCount = 0;
@@ -216,12 +216,16 @@ async function runCliTests() {
   console.log('=====================================================================================');
   console.log(`Total Assertions: ${passedCount + failedCount} | Passed: ${passedCount} | Failed: ${failedCount}`);
 
-  if (failedCount > 0) {
-    process.exit(1);
-  }
+  return {
+    milestone: 'Milestones 24-26 - SCTE-35 DAI, Multi-Room PTP Sync, Hybrid RF Frontend',
+    total: passedCount + failedCount,
+    passed: passedCount,
+    failed: failedCount,
+  };
 }
 
-runCliTests().catch((err) => {
-  console.error('Fatal test error:', err);
-  process.exit(1);
-});
+if (import.meta.url === `file://${process.argv[1]}`) {
+  runMilestones24To26TestSuite().then((res) => {
+    if (res.failed > 0) process.exit(1);
+  });
+}

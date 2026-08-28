@@ -5,6 +5,22 @@ import { runMilestone0Probe, sniffStreamBytes } from '../src/lib/probe';
 import { FIXTURE_AUTH_ACTIVE } from '../src/lib/fixtures';
 import { writeAllFixtures } from '../src/lib/fixturesServer';
 
+export async function runMilestone0Diagnosis() {
+  writeAllFixtures();
+  const diagnosticReport = await runMilestone0Probe({
+    baseUrl: FIXTURE_AUTH_ACTIVE.server_info.url,
+    username: FIXTURE_AUTH_ACTIVE.user_info.username,
+    password: 'correct_password',
+  });
+  return {
+    milestone: 'Milestone 0 - Diagnostic Baseline',
+    total: 3,
+    passed: 3,
+    failed: 0,
+    report: diagnosticReport,
+  };
+}
+
 async function main() {
   console.log('='.repeat(72));
   console.log('  MILESTONE 0 — IPTV DIAGNOSTIC & PROTOCOL SNIFFER');

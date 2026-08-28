@@ -1,6 +1,6 @@
 {
   "name": "IPTV Player & Diagnostics",
-  "description": "IPTV Player Suite - Complete Milestones 0 through 27: Forensic Watermarking & Dynamic Session Fingerprinting (M27), SCTE-35 DAI & SSAI Splicing (M24), Multi-Room PTP Sync & Cast Coordinator (M25), Hybrid RF Frontend & BISS Descrambler (M26), Stalker/MAG Portal (M19), 10-Foot Spatial Leanback (M20), Ultra-Low Latency CMAF (M21), AI Sports Highlights (M22), and P2P Swarm Mesh (M23)",
+  "description": "IPTV Player Suite - Multi-Source Favorites & Watch History (M29), Streaming XMLTV Parser & SQLite B-Tree Indexed EPG (M30), Unified 10k+ Channel Virtualization UI, Spatial Audio 3D Renderer (M28), Forensic Watermarking (M27), SCTE-35 DAI (M24), Multi-Room PTP Sync (M25), and Hybrid RF Frontend (M26)",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

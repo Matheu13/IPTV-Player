@@ -10,7 +10,7 @@ import { URL } from 'url';
 import type { Request, Response } from 'express';
 import { sqliteEpgDB } from './sqliteEpgDb';
 
-const DEFAULT_USER_AGENT = 'IPTVSmartersPro/3.1.5';
+const DEFAULT_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 // Reusable Keep-Alive agents to avoid socket exhaustion and socket hang-ups
 const httpAgent = new http.Agent({
@@ -30,37 +30,20 @@ const httpsAgent = new https.Agent({
 });
 
 /**
- * Validates whether a target URL is allowed to be proxied
- * (Protects against open-proxy / SSRF vulnerabilities).
+ * Validates whether a target URL is allowed to be proxied.
+ * Allows any valid public HTTP/HTTPS media URL while preventing cloud metadata SSRF.
  */
 export function isAllowedProxyUrl(targetUrl: string): boolean {
   try {
+    if (!targetUrl || typeof targetUrl !== 'string') return false;
     const parsed = new URL(targetUrl);
-    // Allow any configured source domain or upstream IP
-    const sources = sqliteEpgDB.getSources();
-    const allowedHosts = new Set<string>([
-      'dnsjibre.xyz',
-      '46.249.110.107',
-      'localhost',
-      '127.0.0.1',
-    ]);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
 
-    sources.forEach((s) => {
-      try {
-        const u = new URL(s.base_url);
-        allowedHosts.add(u.hostname);
-      } catch {}
-    });
+    // Block cloud instance metadata IP / sensitive internal metadata hostnames
+    const blockedHosts = ['169.254.169.254', 'metadata.google.internal', 'metadata'];
+    if (blockedHosts.includes(parsed.hostname.toLowerCase())) return false;
 
-    // Check hostname or IP match
-    if (allowedHosts.has(parsed.hostname)) return true;
-
-    // Allow standard numeric IP addresses associated with IPTV CDNs
-    if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(parsed.hostname)) {
-      return true;
-    }
-
-    return false;
+    return true;
   } catch {
     return false;
   }
@@ -173,6 +156,7 @@ export function fetchManifestWithRedirects(
       method: 'GET',
       agent,
       headers: {
+        Host: parsed.host,
         'User-Agent': DEFAULT_USER_AGENT,
         Accept: '*/*',
         Connection: 'keep-alive',
@@ -244,6 +228,14 @@ export async function handleLiveStreamProxy(
   req: Request,
   res: Response
 ): Promise<void> {
+  // Check if this channel has a custom URL in sqlite DB
+  try {
+    const ch = sqliteEpgDB.getLiveChannel(streamId);
+    if (ch && ch.resolved_stream_url && ch.resolved_stream_url.startsWith('http')) {
+      return handleUniversalProxy(ch.resolved_stream_url, req, res);
+    }
+  } catch {}
+
   const creds = getActiveXtreamCredentials();
   const targetUrl = `${creds.baseUrl}/live/${creds.username}/${creds.password}/${streamId}.${format}`;
 
@@ -255,13 +247,14 @@ export async function handleLiveStreamProxy(
         const rewritten = rewriteM3u8Playlist(manifestResult.text, manifestResult.finalUrl);
         res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
         res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Headers', '*');
         res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
         res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
         res.send(rewritten);
         return;
       }
 
-      // If upstream failed or returned non-M3U8 (or direct stream), fallback to TS streamer
+      // If upstream returned non-M3U8 (or direct stream/404 on m3u8), fallback to TS streamer
       const tsTargetUrl = `${creds.baseUrl}/live/${creds.username}/${creds.password}/${streamId}.ts`;
       return streamDirectMedia(tsTargetUrl, req, res);
     } catch {
@@ -273,6 +266,43 @@ export async function handleLiveStreamProxy(
     // Direct TS stream
     return streamDirectMedia(targetUrl, req, res);
   }
+}
+
+/**
+ * Universal proxy for any external stream URL (M3U8 with segment rewriting, TS, MP4)
+ */
+export async function handleUniversalProxy(
+  targetUrl: string,
+  req: Request,
+  res: Response
+): Promise<void> {
+  if (!isAllowedProxyUrl(targetUrl)) {
+    res.status(403).send('Forbidden: Target host not permitted in proxy');
+    return;
+  }
+
+  const isM3u8 = targetUrl.toLowerCase().includes('.m3u8') || req.query.format === 'm3u8';
+
+  if (isM3u8) {
+    try {
+      const manifestResult = await fetchManifestWithRedirects(targetUrl);
+      if (manifestResult && manifestResult.statusCode === 200 && manifestResult.text.includes('#EXTM3U')) {
+        const rewritten = rewriteM3u8Playlist(manifestResult.text, manifestResult.finalUrl);
+        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Headers', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.send(rewritten);
+        return;
+      }
+    } catch (err: any) {
+      console.warn('[handleUniversalProxy] Manifest fetch failed, falling back to direct media:', err.message);
+    }
+  }
+
+  // Fallback to direct media streaming (Range support, keepalive, binary pipe)
+  return streamDirectMedia(targetUrl, req, res);
 }
 
 /**
@@ -327,6 +357,7 @@ export function streamDirectMedia(
     method: 'GET',
     agent,
     headers: {
+      Host: parsed.host,
       'User-Agent': DEFAULT_USER_AGENT,
       Accept: '*/*',
       ...(req.headers.range ? { Range: req.headers.range } : {}),
