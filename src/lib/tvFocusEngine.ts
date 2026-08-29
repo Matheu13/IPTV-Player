@@ -324,6 +324,37 @@ export class TvFocusEngine {
 
     return bestNode || candidates[0];
   }
+
+  public getAllNodes(): FocusNode[] {
+    return Array.from(this.nodes.values());
+  }
+
+  public getZoneNodes(zone: string): FocusNode[] {
+    return Array.from(this.nodes.values()).filter((n) => n.zone === zone);
+  }
+
+  public hasNode(nodeId: string): boolean {
+    return this.nodes.has(nodeId);
+  }
+
+  public getNode(nodeId: string): FocusNode | undefined {
+    return this.nodes.get(nodeId);
+  }
+
+  public getFocusHistory(): string[] {
+    return [...this.focusHistory];
+  }
+
+  public reset(): void {
+    this.nodes.clear();
+    this.zones.clear();
+    this.activeNodeId = null;
+    this.zoneLastFocused.clear();
+    this.focusHistory = [];
+    this.setupDefaultZones();
+    this.notifyListeners();
+  }
 }
 
 export const tvFocusEngine = new TvFocusEngine();
+

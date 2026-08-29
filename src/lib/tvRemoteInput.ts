@@ -2,7 +2,7 @@
  * Android TV / Fire TV Remote Keycode Handler and Keypad Zapper Bridge
  */
 
-import { tvFocusEngine, DPadDirection } from './tvFocusEngine';
+import { tvFocusEngine, DPadDirection, TvFocusEngine } from './tvFocusEngine';
 
 export const ANDROID_KEYCODES = {
   KEYCODE_DPAD_UP: 19,
@@ -53,11 +53,17 @@ export class TvRemoteInputBridge {
   private digitCommitTimer: any = null;
   private callbacks: Set<RemoteEventCallback> = new Set();
   private enabled = true;
+  private focusEngine: TvFocusEngine;
 
-  constructor() {
+  constructor(focusEngine: TvFocusEngine = tvFocusEngine) {
+    this.focusEngine = focusEngine;
     if (typeof window !== 'undefined') {
       window.addEventListener('keydown', this.handleKeyDown.bind(this));
     }
+  }
+
+  public setFocusEngine(engine: TvFocusEngine): void {
+    this.focusEngine = engine;
   }
 
   public setEnabled(val: boolean): void {
@@ -77,13 +83,13 @@ export class TvRemoteInputBridge {
       case 'DOWN':
       case 'LEFT':
       case 'RIGHT':
-        tvFocusEngine.handleDPad(action as DPadDirection);
+        this.focusEngine.handleDPad(action as DPadDirection);
         break;
       case 'SELECT':
-        tvFocusEngine.handleSelect();
+        this.focusEngine.handleSelect();
         break;
       case 'BACK':
-        tvFocusEngine.handleBack();
+        this.focusEngine.handleBack();
         break;
       case 'DIGIT':
         if (typeof detail === 'number' || typeof detail === 'string') {
@@ -99,6 +105,7 @@ export class TvRemoteInputBridge {
 
     this.callbacks.forEach((cb) => cb.onAction && cb.onAction(action, detail));
   }
+
 
   public handleDigitInput(digit: string): void {
     if (!/^\d$/.test(digit)) return;
@@ -212,6 +219,20 @@ export class TvRemoteInputBridge {
         break;
     }
   }
+  public simulateKey(key: string): void {
+    this.handleKeyDown({
+      key,
+      preventDefault: () => {},
+      target: null as any,
+    } as any);
+  }
+
+  public reset(): void {
+    this.clearDigitBuffer();
+    this.callbacks.clear();
+    this.enabled = true;
+  }
 }
 
 export const tvRemoteBridge = new TvRemoteInputBridge();
+

@@ -44,9 +44,13 @@ import { Milestone28TestSuite } from './components/Milestone28TestSuite';
 import { Milestone29TestSuite } from './components/Milestone29TestSuite';
 import { Milestone30TestSuite } from './components/Milestone30TestSuite';
 import { Milestone31TestSuite } from './components/Milestone31TestSuite';
+import { Milestone32TestSuite } from './components/Milestone32TestSuite';
+import { Milestone33TestSuite } from './components/Milestone33TestSuite';
+import { Milestone34TestSuite } from './components/Milestone34TestSuite';
 import { SpatialAudioSurface } from './components/SpatialAudioSurface';
 import { MilestoneUiRequirementsTestSuite } from './components/MilestoneUiRequirementsTestSuite';
 import { UnifiedIptvSurface } from './components/UnifiedIptvSurface';
+import { AdaptiveResolutionSurface } from './components/AdaptiveResolutionSurface';
 import { MultiViewSurface } from './components/MultiViewSurface';
 import { OfflineDownloadVault } from './components/OfflineDownloadVault';
 import { ChannelHealthWatchdogSurface } from './components/ChannelHealthWatchdogSurface';
@@ -85,11 +89,18 @@ import {
   Fingerprint,
   Headphones,
   Link2,
+  Smartphone,
+  Monitor,
+  Sparkles,
 } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<
+    | 'adaptive-resolution'
     | 'unified-iptv'
+    | 'm34-test-suite'
+    | 'm33-test-suite'
+    | 'm32-test-suite'
     | 'm31-test-suite'
     | 'm30-test-suite'
     | 'm29-test-suite'
@@ -235,6 +246,19 @@ export default function App() {
 
         {/* Tab Navigation */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex space-x-1 overflow-x-auto pb-1 text-xs font-medium scrollbar-thin">
+          {/* Adaptive Resolution Manager - 4K UHD & HW Decoder Auto-Default */}
+          <button
+            id="tab-adaptive-resolution"
+            onClick={() => setActiveTab('adaptive-resolution')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'adaptive-resolution'
+                ? 'border-emerald-500 bg-slate-800 text-emerald-300 font-semibold shadow-inner'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Sparkles className="w-4 h-4 text-emerald-400" /> 4K UHD Adaptive Manager
+          </button>
+
           {/* Milestone 28 UI Requirements - Unified IPTV Player */}
           <button
             id="tab-unified-iptv"
@@ -246,6 +270,45 @@ export default function App() {
             }`}
           >
             <Tv className="w-4 h-4 text-indigo-400" /> Unified IPTV Player (10k+)
+          </button>
+
+          {/* Milestone 34: Windows Requirements */}
+          <button
+            id="tab-m34-test-suite"
+            onClick={() => setActiveTab('m34-test-suite')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'm34-test-suite'
+                ? 'border-sky-500 bg-slate-800 text-sky-300 font-semibold shadow-inner'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Monitor className="w-4 h-4 text-sky-400" /> M34: Windows Desktop (9)
+          </button>
+
+          {/* Milestone 33: Android Mobile Requirements */}
+          <button
+            id="tab-m33-test-suite"
+            onClick={() => setActiveTab('m33-test-suite')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'm33-test-suite'
+                ? 'border-emerald-500 bg-slate-800 text-emerald-300 font-semibold shadow-inner'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Smartphone className="w-4 h-4 text-emerald-400" /> M33: Android Mobile (9)
+          </button>
+
+          {/* Milestone 32: Android TV & Fire TV Remote Requirements */}
+          <button
+            id="tab-m32-test-suite"
+            onClick={() => setActiveTab('m32-test-suite')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'm32-test-suite'
+                ? 'border-indigo-500 bg-slate-800 text-indigo-300 font-semibold shadow-inner'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Tv className="w-4 h-4 text-indigo-400" /> M32: TV &amp; Fire Remote (9)
           </button>
 
           {/* Milestone 29: Favorites & Watch History */}
@@ -976,7 +1039,13 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full">
-        {/* Milestone 29, 30 & 31 Views */}
+        {/* Adaptive Resolution Manager 4K UHD Surface */}
+        {activeTab === 'adaptive-resolution' && <AdaptiveResolutionSurface />}
+
+        {/* Milestone 29, 30, 31, 32, 33 & 34 Views */}
+        {activeTab === 'm34-test-suite' && <Milestone34TestSuite />}
+        {activeTab === 'm33-test-suite' && <Milestone33TestSuite />}
+        {activeTab === 'm32-test-suite' && <Milestone32TestSuite />}
         {activeTab === 'm31-test-suite' && <Milestone31TestSuite />}
         {activeTab === 'm30-test-suite' && <Milestone30TestSuite />}
         {activeTab === 'm29-test-suite' && <Milestone29TestSuite />}

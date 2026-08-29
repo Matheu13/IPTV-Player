@@ -43,7 +43,7 @@ export class SQLiteEpgDB {
     this.db = new DatabaseSync(targetFile);
     this.initSchema();
     if (targetFile !== ':memory:') {
-      this.seedSampleEpgIfEmpty();
+      this.seedSampleEpg();
     }
   }
 
@@ -328,7 +328,7 @@ export class SQLiteEpgDB {
       let reviewReason: string | undefined = undefined;
 
       // 1. Check existing stored mapping
-      if (storedMappings[chKey]) {
+      if (storedMappings[chKey] && storedMappings[chKey].xmltv_channel_id) {
         xmltvId = storedMappings[chKey].xmltv_channel_id;
         matchType = storedMappings[chKey].match_type;
         matchScore = Number(storedMappings[chKey].match_score);
@@ -617,9 +617,13 @@ export class SQLiteEpgDB {
   /**
    * Seeds default multi-channel EPG schedule for instant live preview
    */
-  private seedSampleEpgIfEmpty(): void {
-    const countRow = this.db.prepare('SELECT COUNT(*) as count FROM epg_programmes').get() as any;
-    if (countRow && Number(countRow.count) > 0) return;
+  public seedSampleEpg(force: boolean = false): void {
+    const nowSec = Math.floor(Date.now() / 1000);
+    const espnNow = this.db.prepare('SELECT COUNT(*) as count FROM epg_programmes WHERE channel_id = ? AND start_time_epoch <= ? AND stop_time_epoch > ?').get('ESPN.us', nowSec, nowSec) as any;
+    
+    if (!force && espnNow && Number(espnNow.count) > 0) {
+      return;
+    }
 
     // Seed realistic 48-hour schedules for our core sample channels
     const channels: XmltvChannel[] = [

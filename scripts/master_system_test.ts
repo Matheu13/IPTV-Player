@@ -19,11 +19,16 @@ import { runMilestone27TestSuite } from './milestone_27_tests';
 import { runMilestone28TestSuite } from './milestone_28_tests';
 import { runMilestone29TestSuite } from './milestone_29_tests';
 import { runMilestone30TestSuite } from './milestone_30_tests';
+import { runMilestone31Tests } from './milestone_31_tests';
+import { runMilestone32Tests } from './milestone_32_tests';
+import { runMilestone33Tests } from './milestone_33_tests';
+import { runMilestone34Tests } from './milestone_34_tests';
+import { runAdaptiveResolutionManagerTestSuite } from './adaptive_resolution_manager_tests';
 import { runMilestoneUiRequirementsTestSuite } from './milestone_ui_requirements_tests';
 
 export async function runAllSystemTests() {
   console.log('========================================================================');
-  console.log('🚀 EXECUTING COMPREHENSIVE END-TO-END SYSTEM TEST SUITE (M0 -> M30)');
+  console.log('🚀 EXECUTING COMPREHENSIVE END-TO-END SYSTEM TEST SUITE (M0 -> M34 + ARM)');
   console.log('========================================================================\n');
 
   const suites = [
@@ -43,6 +48,11 @@ export async function runAllSystemTests() {
     { name: 'M28: Spatial Audio & MPEG-H 3D Object Rendering', fn: runMilestone28TestSuite },
     { name: 'M29: Favorites & Watch History Resilience', fn: runMilestone29TestSuite },
     { name: 'M30: Large-Scale XMLTV Streaming & Indexed Guide', fn: runMilestone30TestSuite },
+    { name: 'M31: Leanback D-Pad & Spatial Grid Navigation', fn: runMilestone31Tests },
+    { name: 'M32: Channel Health Watchdog & Real-Time Probing', fn: runMilestone32Tests },
+    { name: 'M33: Android Mobile Touch Gestures & 4K Surface', fn: runMilestone33Tests },
+    { name: 'M34: Windows Desktop D3D11 Hardware & Hotkeys', fn: runMilestone34Tests },
+    { name: 'ARM: Adaptive Resolution Manager (4K HW Default)', fn: runAdaptiveResolutionManagerTestSuite },
     { name: 'UI Requirements: Virtualization & 10,000+ Channel Matrix', fn: runMilestoneUiRequirementsTestSuite },
   ];
 
@@ -53,10 +63,20 @@ export async function runAllSystemTests() {
   for (const suite of suites) {
     try {
       console.log(`\n▶ Running [${suite.name}]...`);
-      const res = await suite.fn();
-      const passed = res.passed ?? 0;
-      const failed = res.failed ?? 0;
-      const total = res.total ?? (passed + failed);
+      const res: any = await suite.fn();
+      let passed = 0;
+      let failed = 0;
+      let total = 0;
+
+      if (Array.isArray(res)) {
+        passed = res.filter((r: any) => r.passed).length;
+        failed = res.filter((r: any) => !r.passed).length;
+        total = res.length;
+      } else if (res && typeof res === 'object') {
+        passed = typeof res.passed === 'number' ? res.passed : (res.results ? res.results.filter((r: any) => r.passed).length : 0);
+        failed = typeof res.failed === 'number' ? res.failed : (res.results ? res.results.filter((r: any) => !r.passed).length : 0);
+        total = typeof res.total === 'number' ? res.total : (passed + failed);
+      }
       totalPassed += passed;
       totalFailed += failed;
       suiteResults.push({ name: suite.name, total, passed, failed });

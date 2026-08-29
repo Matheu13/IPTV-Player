@@ -31,6 +31,11 @@ import { runMilestones16To18TestSuite } from './scripts/milestones_16_to_18_test
 import { runMilestone29TestSuite } from './scripts/milestone_29_tests';
 import { runMilestone30TestSuite } from './scripts/milestone_30_tests';
 import { runMilestone31Tests } from './scripts/milestone_31_tests';
+import { runMilestone32Tests } from './scripts/milestone_32_tests';
+import { runMilestone33Tests } from './scripts/milestone_33_tests';
+import { runMilestone34Tests } from './scripts/milestone_34_tests';
+import { runAdaptiveResolutionManagerTestSuite } from './scripts/adaptive_resolution_manager_tests';
+import { globalAdaptiveResolutionManager } from './src/lib/adaptiveResolutionManager';
 import { globalFavoritesHistoryEngine } from './src/lib/favoritesHistoryEngine';
 import { ChannelManager, RemoteZapperController } from './src/lib/channelManager';
 import { handleLiveStreamProxy, streamDirectMedia, rewriteM3u8Playlist, handleUniversalProxy } from './src/lib/streamProxy';
@@ -1642,6 +1647,102 @@ async function startServer() {
         count: mappings.length,
         mappings,
       });
+    } catch (err: any) {
+      res.status(500).json({ error: redact(err.message) });
+    }
+  });
+
+  // ==========================================
+  // MILESTONE 32: TV / FIRE TV REMOTE AUTOMATION
+  // ==========================================
+  app.get('/api/m32/test-suite', async (_req, res) => {
+    try {
+      const results = await runMilestone32Tests();
+      const totalPassed = results.filter((r) => r.passed).length;
+      res.json({
+        milestone: 'Milestone 32: TV / Fire TV Remote Usability',
+        totalPassed,
+        totalFailed: results.length - totalPassed,
+        results,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: redact(err.message) });
+    }
+  });
+
+  // ==========================================
+  // MILESTONE 33: ANDROID MOBILE ARCHITECTURE
+  // ==========================================
+  app.get('/api/m33/test-suite', async (_req, res) => {
+    try {
+      const results = await runMilestone33Tests();
+      const totalPassed = results.filter((r) => r.passed).length;
+      res.json({
+        milestone: 'Milestone 33: Android Mobile Requirements',
+        totalPassed,
+        totalFailed: results.length - totalPassed,
+        results,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: redact(err.message) });
+    }
+  });
+
+  // ==========================================
+  // MILESTONE 34: WINDOWS DESKTOP ARCHITECTURE
+  // ==========================================
+  app.get('/api/m34/test-suite', async (_req, res) => {
+    try {
+      const results = await runMilestone34Tests();
+      const totalPassed = results.filter((r) => r.passed).length;
+      res.json({
+        milestone: 'Milestone 34: Windows Requirements',
+        totalPassed,
+        totalFailed: results.length - totalPassed,
+        results,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: redact(err.message) });
+    }
+  });
+
+  // ==========================================
+  // ADAPTIVE RESOLUTION MANAGER (4K AUTO-DEFAULT & HW DECODER)
+  // ==========================================
+  app.get('/api/adaptive-resolution/test-suite', async (_req, res) => {
+    try {
+      const summary = await runAdaptiveResolutionManagerTestSuite();
+      res.json(summary);
+    } catch (err: any) {
+      res.status(500).json({ error: redact(err.message) });
+    }
+  });
+
+  app.get('/api/adaptive-resolution/state', (_req, res) => {
+    try {
+      const state = globalAdaptiveResolutionManager.getState();
+      res.json(state);
+    } catch (err: any) {
+      res.status(500).json({ error: redact(err.message) });
+    }
+  });
+
+  app.post('/api/adaptive-resolution/configure', (req, res) => {
+    try {
+      const { policy, hwOverride, bandwidthMbps, tierId } = req.body || {};
+      if (policy) {
+        globalAdaptiveResolutionManager.setPolicy(policy);
+      }
+      if (hwOverride !== undefined) {
+        globalAdaptiveResolutionManager.setHardwareAccelerationOverride(hwOverride);
+      }
+      if (bandwidthMbps !== undefined) {
+        globalAdaptiveResolutionManager.setBandwidthDirect(Number(bandwidthMbps));
+      }
+      if (tierId) {
+        globalAdaptiveResolutionManager.selectTierManual(tierId);
+      }
+      res.json(globalAdaptiveResolutionManager.getState());
     } catch (err: any) {
       res.status(500).json({ error: redact(err.message) });
     }

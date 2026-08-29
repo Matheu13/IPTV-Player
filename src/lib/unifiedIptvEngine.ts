@@ -192,6 +192,9 @@ export class UnifiedIptvEngine {
    * Syncs real live channels from the ingested SQLite DB and Xtream/M3U provider backend
    */
   public async syncFromBackend(): Promise<{ success: boolean; count: number; error?: string }> {
+    if (typeof window === 'undefined') {
+      return { success: true, count: this.channels.length };
+    }
     try {
       // 1. Fetch sources
       const sourcesRes = await fetch('/api/m1/sources/list');

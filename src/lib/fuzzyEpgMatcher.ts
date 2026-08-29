@@ -58,7 +58,7 @@ export function normalizeChannelName(name: string): string {
 
   // 4. Expand common broadcast abbreviations for consistent comparison
   cleaned = cleaned
-    .replace(/\b(intl|internatnl|intnl)\b/gi, 'international')
+    .replace(/\b(intl|internatnl|intnl|int)\b/gi, 'international')
     .replace(/\b(docu|doc)\b/gi, 'documentary')
     .replace(/\b(ent|entmt)\b/gi, 'entertainment')
     .replace(/\b(spts|sport)\b/gi, 'sports');

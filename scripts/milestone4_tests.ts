@@ -42,6 +42,8 @@ function assert(condition: boolean, msg: string) {
 }
 
 export async function runMilestone4TestSuite(): Promise<Milestone4TestSuiteSummary> {
+  sqliteEpgDB.clearAllEpg();
+  sqliteEpgDB.seedSampleEpg(true);
   const startTime = Date.now();
   const results: Milestone4TestResult[] = [];
 
