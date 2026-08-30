@@ -10,7 +10,7 @@
 import { DeviceCapabilityDetector, DevicePlatformProfile } from './deviceCapabilityDetector';
 import { globalAbrQosEngine, AbrQosEngine, StreamRendition } from './abrQosEngine';
 
-export type ResolutionTierId = '2160p_4k' | '1440p_2k' | '1080p_fhd' | '720p_hd' | '480p_sd' | '360p_ld';
+export type ResolutionTierId = '4320p_8k' | '2160p_4k' | '1440p_2k' | '1080p_fhd' | '720p_hd' | '480p_sd' | '360p_ld';
 
 export interface AdaptiveResolutionTier {
   id: ResolutionTierId;
@@ -64,7 +64,8 @@ export interface HardwareDecoderTelemetry {
 }
 
 export type AdaptiveResolutionPolicy =
-  | 'auto_highest_supported' // Default: Select highest supported up to 4K based on HW + Bandwidth
+  | 'auto_highest_supported' // Default: Select highest supported (up to 8K/4K) based on HW + Bandwidth
+  | 'force_8k'               // Force 8K resolution lock on capable hardware
   | 'force_4k'               // Force 4K resolution lock
   | 'balanced'               // Balances bandwidth & resource usage (caps at 1440p/1080p)
   | 'bandwidth_saver'        // Data saver (caps at 720p/480p)
@@ -93,6 +94,19 @@ export interface AdaptiveDecisionState {
 }
 
 export const STANDARD_RESOLUTION_TIERS: AdaptiveResolutionTier[] = [
+  {
+    id: '4320p_8k',
+    label: '8K Ultra HD (4320p60 HDR)',
+    width: 7680,
+    height: 4320,
+    fps: 60,
+    minBandwidthMbps: 40.0,
+    recommendedBandwidthMbps: 50.0,
+    requiresHardwareAcceleration: true,
+    codecs: ['HEVC Main10', 'AV1 Main Profile'],
+    isHdr: true,
+    bitrateBps: 45_000_000,
+  },
   {
     id: '2160p_4k',
     label: '4K Ultra HD (2160p60 HDR)',
@@ -358,28 +372,34 @@ export class AdaptiveResolutionManager {
     let isCappedByBw = false;
     let isCappedByDisp = false;
 
-    if (this.policy === 'force_4k') {
-      targetTier = this.tiers.find((t) => t.id === '2160p_4k') || this.tiers[0];
+    if (this.policy === 'force_8k') {
+      targetTier = this.tiers.find((t) => t.id === '4320p_8k') || this.tiers[0];
+      reason = 'User policy override: Force 8K Ultra HD Direct Stream';
+    } else if (this.policy === 'force_4k') {
+      targetTier = this.tiers.find((t) => t.id === '2160p_4k') || this.tiers[1];
       reason = 'User policy override: Force 4K Ultra HD Lock';
     } else if (this.policy === 'balanced') {
-      targetTier = this.tiers.find((t) => t.id === '1080p_fhd') || this.tiers[2];
+      targetTier = this.tiers.find((t) => t.id === '1080p_fhd') || this.tiers[3];
       reason = 'Balanced policy: Capped at Full HD 1080p for energy & data optimization';
     } else if (this.policy === 'bandwidth_saver') {
-      targetTier = this.tiers.find((t) => t.id === '480p_sd') || this.tiers[4];
+      targetTier = this.tiers.find((t) => t.id === '480p_sd') || this.tiers[5];
       reason = 'Bandwidth saver policy: Capped at SD 480p to minimize network footprint';
     } else if (this.policy === 'manual') {
       targetTier = this.currentTier;
       reason = `Manual tier lock: ${this.currentTier.label}`;
     } else {
-      // Default: 'auto_highest_supported'
-      // 1. Check if 4K is supported with Hardware Acceleration
-      if (hwEffective && this.bandwidth.estimatedMbps >= 25.0 && this.bandwidth.bufferOccupancySec >= 3.0) {
-        targetTier = this.tiers.find((t) => t.id === '2160p_4k') || this.tiers[0];
+      // Default: 'auto_highest_supported' (No artificial resolution ceiling - Req 43)
+      // 1. Check if 8K is supported with Hardware Acceleration & High Bandwidth
+      if (hwEffective && this.hardware.maxHardwareResolution === '8K' && this.bandwidth.estimatedMbps >= 40.0 && this.bandwidth.bufferOccupancySec >= 4.0) {
+        targetTier = this.tiers.find((t) => t.id === '4320p_8k') || this.tiers[0];
+        reason = `8K Pipeline Active (${this.hardware.api}) & Bandwidth (${this.bandwidth.estimatedMbps.toFixed(1)} Mbps >= 40 Mbps) -> Defaulting to 8K Ultra HD (7680x4320@60fps - No Artificial Ceiling)`;
+      } else if (hwEffective && this.bandwidth.estimatedMbps >= 25.0 && this.bandwidth.bufferOccupancySec >= 3.0) {
+        targetTier = this.tiers.find((t) => t.id === '2160p_4k') || this.tiers[1];
         reason = `Hardware Acceleration Active (${this.hardware.api}) & Bandwidth (${this.bandwidth.estimatedMbps.toFixed(1)} Mbps >= 25 Mbps) -> Defaulting to Highest Supported Quality: 4K Ultra HD (3840x2160@60fps)`;
       } else if (!hwEffective) {
         // Hardware acceleration NOT available: Cap at 1080p FHD to avoid software CPU decode bottleneck
         isCappedByHw = true;
-        const safeHwTier = this.tiers.find((t) => !t.requiresHardwareAcceleration && this.bandwidth.estimatedMbps >= t.minBandwidthMbps) || this.tiers[2];
+        const safeHwTier = this.tiers.find((t) => !t.requiresHardwareAcceleration && this.bandwidth.estimatedMbps >= t.minBandwidthMbps) || this.tiers[3];
         targetTier = safeHwTier;
         reason = `Hardware acceleration unavailable -> Resolution capped to ${safeHwTier.label} to prevent CPU overload and frame dropping`;
       } else if (this.bandwidth.estimatedMbps < 25.0) {
@@ -393,8 +413,8 @@ export class AdaptiveResolutionManager {
       }
 
       // Check buffer emergency protection
-      if (this.bandwidth.bufferOccupancySec < 2.0 && targetTier.id === '2160p_4k') {
-        const fallback = this.tiers.find((t) => t.id === '1080p_fhd') || this.tiers[2];
+      if (this.bandwidth.bufferOccupancySec < 2.0 && (targetTier.id === '4320p_8k' || targetTier.id === '2160p_4k')) {
+        const fallback = this.tiers.find((t) => t.id === '1080p_fhd') || this.tiers[3];
         targetTier = fallback;
         reason = `Buffer depletion (${this.bandwidth.bufferOccupancySec.toFixed(1)}s < 2.0s) -> Temporary step-down to ${fallback.label} to prevent stall`;
       }

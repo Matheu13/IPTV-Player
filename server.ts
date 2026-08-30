@@ -34,6 +34,8 @@ import { runMilestone31Tests } from './scripts/milestone_31_tests';
 import { runMilestone32Tests } from './scripts/milestone_32_tests';
 import { runMilestone33Tests } from './scripts/milestone_33_tests';
 import { runMilestone34Tests } from './scripts/milestone_34_tests';
+import { runMilestone37to38TestSuite } from './scripts/milestone_37_38_tests';
+import { globalSourceMonitorEngine } from './src/lib/sourceMonitorEngine';
 import { runAdaptiveResolutionManagerTestSuite } from './scripts/adaptive_resolution_manager_tests';
 import { globalAdaptiveResolutionManager } from './src/lib/adaptiveResolutionManager';
 import { globalFavoritesHistoryEngine } from './src/lib/favoritesHistoryEngine';
@@ -1743,6 +1745,56 @@ async function startServer() {
         globalAdaptiveResolutionManager.selectTierManual(tierId);
       }
       res.json(globalAdaptiveResolutionManager.getState());
+    } catch (err: any) {
+      res.status(500).json({ error: redact(err.message) });
+    }
+  });
+
+  // ==========================================
+  // MILESTONES 37 & 38: SOURCE-SPECIFIC REFRESH & PROVIDER STATUS MONITOR
+  // ==========================================
+  app.get('/api/m37-38/test-suite', async (_req, res) => {
+    try {
+      const summary = await runMilestone37to38TestSuite();
+      res.json(summary);
+    } catch (err: any) {
+      res.status(500).json({ error: redact(err.message) });
+    }
+  });
+
+  app.get('/api/sources/monitor', (_req, res) => {
+    try {
+      const sources = globalSourceMonitorEngine.getAllSources();
+      res.json({
+        sources,
+        total: sources.length,
+        timestamp: Date.now(),
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: redact(err.message) });
+    }
+  });
+
+  app.post('/api/sources/monitor/refresh', async (req, res) => {
+    try {
+      const { sourceId, simulationMode } = req.body || {};
+      if (!sourceId) {
+        return res.status(400).json({ error: 'sourceId is required' });
+      }
+      const result = await globalSourceMonitorEngine.refreshSourceIsolated(sourceId, simulationMode);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: redact(err.message) });
+    }
+  });
+
+  app.post('/api/sources/monitor/refresh-all', async (_req, res) => {
+    try {
+      const results = await globalSourceMonitorEngine.refreshAllSourcesIsolated();
+      res.json({
+        success: true,
+        results: Object.fromEntries(results.entries()),
+      });
     } catch (err: any) {
       res.status(500).json({ error: redact(err.message) });
     }

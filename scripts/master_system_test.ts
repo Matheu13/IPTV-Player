@@ -23,12 +23,15 @@ import { runMilestone31Tests } from './milestone_31_tests';
 import { runMilestone32Tests } from './milestone_32_tests';
 import { runMilestone33Tests } from './milestone_33_tests';
 import { runMilestone34Tests } from './milestone_34_tests';
+import { runMilestone37to38TestSuite } from './milestone_37_38_tests';
 import { runAdaptiveResolutionManagerTestSuite } from './adaptive_resolution_manager_tests';
+import { runDeviceCapabilityDetectorTestSuite } from './device_capability_detector_tests';
+import { runReq43to45TestSuite } from './req_43_to_45_tests';
 import { runMilestoneUiRequirementsTestSuite } from './milestone_ui_requirements_tests';
 
 export async function runAllSystemTests() {
   console.log('========================================================================');
-  console.log('🚀 EXECUTING COMPREHENSIVE END-TO-END SYSTEM TEST SUITE (M0 -> M34 + ARM)');
+  console.log('🚀 EXECUTING COMPREHENSIVE END-TO-END SYSTEM TEST SUITE (M0 -> M34 + ARM + REQ 42-45)');
   console.log('========================================================================\n');
 
   const suites = [
@@ -52,6 +55,9 @@ export async function runAllSystemTests() {
     { name: 'M32: Channel Health Watchdog & Real-Time Probing', fn: runMilestone32Tests },
     { name: 'M33: Android Mobile Touch Gestures & 4K Surface', fn: runMilestone33Tests },
     { name: 'M34: Windows Desktop D3D11 Hardware & Hotkeys', fn: runMilestone34Tests },
+    { name: 'M37-M38: Source-Specific Refresh & Provider Status', fn: runMilestone37to38TestSuite },
+    { name: 'Req 42: Device Capability Detection (Codecs, HW, HDR, Display)', fn: runDeviceCapabilityDetectorTestSuite },
+    { name: 'Req 43-45: 8K Distinction, Minimal Dependencies, & Security Boundary', fn: runReq43to45TestSuite },
     { name: 'ARM: Adaptive Resolution Manager (4K HW Default)', fn: runAdaptiveResolutionManagerTestSuite },
     { name: 'UI Requirements: Virtualization & 10,000+ Channel Matrix', fn: runMilestoneUiRequirementsTestSuite },
   ];
@@ -105,8 +111,13 @@ export async function runAllSystemTests() {
   };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
-  runAllSystemTests().then((res) => {
-    if (res.totalFailed > 0) process.exit(1);
-  });
+if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith('master_system_test.ts')) {
+  runAllSystemTests()
+    .then((res) => {
+      process.exit(res.totalFailed > 0 ? 1 : 0);
+    })
+    .catch((err) => {
+      console.error('Fatal test error:', err);
+      process.exit(1);
+    });
 }

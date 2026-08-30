@@ -757,6 +757,44 @@ export class UnifiedIptvEngine {
     return CATEGORIES;
   }
 
+  public getCategories(): string[] {
+    return this.getCategoriesList();
+  }
+
+  public getAllChannels(): UnifiedChannel[] {
+    return [...this.channels];
+  }
+
+  public getChannels(): UnifiedChannel[] {
+    return [...this.channels];
+  }
+
+  public getSources(): IptvSource[] {
+    return [...this.state.sources];
+  }
+
+  public isFavorite(channelId: string): boolean {
+    return this.favoritesSet.has(channelId);
+  }
+
+  public getRecentChannels(): UnifiedChannel[] {
+    if (this.recentWatchedList.length > 0) {
+      const map = new Map(this.channels.map((c) => [c.id, c]));
+      return this.recentWatchedList
+        .map((id) => map.get(id))
+        .filter((c): c is UnifiedChannel => Boolean(c));
+    }
+    return this.channels.slice(0, 10);
+  }
+
+  public recordChannelWatch(channelId: string): void {
+    this.recentWatchedList = [
+      channelId,
+      ...this.recentWatchedList.filter((id) => id !== channelId),
+    ].slice(0, 20);
+    this.notify();
+  }
+
   public triggerFailover(channelId: string, errorReason: string = 'HTTP 404 / 403 Forbidden'): { success: boolean; newStreamUrl: string | null; altIndex: number } {
     const ch = this.channels.find((c) => c.id === channelId);
     if (!ch) return { success: false, newStreamUrl: null, altIndex: 0 };

@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { AppShell } from './ui/components/AppShell';
+import { DesignSystemProvider } from './ui/context/DesignSystemContext';
 import { Milestone0DiagnosticReport } from './types';
 import { DiagnosticReportView } from './components/DiagnosticReportView';
 import { LiveProbeRunner } from './components/LiveProbeRunner';
@@ -47,6 +49,8 @@ import { Milestone31TestSuite } from './components/Milestone31TestSuite';
 import { Milestone32TestSuite } from './components/Milestone32TestSuite';
 import { Milestone33TestSuite } from './components/Milestone33TestSuite';
 import { Milestone34TestSuite } from './components/Milestone34TestSuite';
+import { SourceMonitorDashboard } from './components/SourceMonitorDashboard';
+import { Milestone37to38TestSuite } from './components/Milestone37to38TestSuite';
 import { SpatialAudioSurface } from './components/SpatialAudioSurface';
 import { MilestoneUiRequirementsTestSuite } from './components/MilestoneUiRequirementsTestSuite';
 import { UnifiedIptvSurface } from './components/UnifiedIptvSurface';
@@ -95,7 +99,10 @@ import {
 } from 'lucide-react';
 
 export default function App() {
+  const [appMode, setAppMode] = useState<'cinematic_os' | 'diagnostic_matrix'>('cinematic_os');
   const [activeTab, setActiveTab] = useState<
+    | 'source-monitor'
+    | 'm37-38-test-suite'
     | 'adaptive-resolution'
     | 'unified-iptv'
     | 'm34-test-suite'
@@ -208,6 +215,25 @@ export default function App() {
     setActiveTab('live-player');
   };
 
+  if (appMode === 'cinematic_os') {
+    return (
+      <DesignSystemProvider>
+        <div className="relative h-screen w-screen overflow-hidden">
+          <AppShell />
+          {/* Floating Quick Switcher to Developer Diagnostics Matrix */}
+          <button
+            onClick={() => setAppMode('diagnostic_matrix')}
+            className="fixed bottom-3 right-3 z-50 px-2.5 py-1 bg-slate-900/90 hover:bg-slate-800 text-slate-400 hover:text-sky-300 border border-slate-700/80 rounded-lg text-[11px] font-mono shadow-xl transition-all flex items-center gap-1.5 backdrop-blur-md opacity-75 hover:opacity-100"
+            title="Switch to Developer Diagnostics & Milestone Matrix"
+          >
+            <Activity className="w-3.5 h-3.5 text-sky-400" />
+            <span>Dev Diagnostics</span>
+          </button>
+        </div>
+      </DesignSystemProvider>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
       {/* Top Navigation Bar */}
@@ -221,7 +247,7 @@ export default function App() {
               <div className="flex items-center gap-2">
                 <h1 className="font-bold text-slate-100 text-base tracking-tight">IPTV Player &amp; Video Suite</h1>
                 <span className="text-[10px] font-mono font-semibold bg-emerald-950 text-emerald-300 border border-emerald-800 px-2 py-0.5 rounded-full">
-                  Milestones 0 — 14 Complete
+                  Diagnostic Matrix
                 </span>
               </div>
               <p className="text-xs text-slate-400">Atmos/Sub Sync (M11) • DVR/Timeshift (M12) • ABR/QoS (M13) • Parental Vault (M14)</p>
@@ -229,6 +255,13 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => setAppMode('cinematic_os')}
+              className="px-3 py-1.5 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold rounded-lg text-xs shadow-lg shadow-sky-500/20 transition-all flex items-center gap-1.5"
+            >
+              <Tv className="w-4 h-4" />
+              <span>Open Cinematic Player UI</span>
+            </button>
             {/* Strict Connection Limit Indicator */}
             <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 bg-slate-900 border border-slate-700 rounded-lg text-xs">
               <Lock className="w-3.5 h-3.5 text-amber-400" />
@@ -246,6 +279,32 @@ export default function App() {
 
         {/* Tab Navigation */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex space-x-1 overflow-x-auto pb-1 text-xs font-medium scrollbar-thin">
+          {/* Source Monitor Dashboard (Sections 37 & 38) */}
+          <button
+            id="tab-source-monitor"
+            onClick={() => setActiveTab('source-monitor')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'source-monitor'
+                ? 'border-emerald-500 bg-slate-800 text-emerald-300 font-semibold shadow-inner'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Activity className="w-4 h-4 text-emerald-400" /> Source Monitor Dashboard
+          </button>
+
+          {/* Milestone 37-38 Test Suite */}
+          <button
+            id="tab-m37-38-test-suite"
+            onClick={() => setActiveTab('m37-38-test-suite')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'm37-38-test-suite'
+                ? 'border-indigo-500 bg-slate-800 text-indigo-300 font-semibold shadow-inner'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Layers className="w-4 h-4 text-indigo-400" /> M37-38: Source Monitor (10)
+          </button>
+
           {/* Adaptive Resolution Manager - 4K UHD & HW Decoder Auto-Default */}
           <button
             id="tab-adaptive-resolution"
@@ -1039,6 +1098,10 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full">
+        {/* Source Monitor Dashboard & M37-38 Test Suite */}
+        {activeTab === 'source-monitor' && <SourceMonitorDashboard />}
+        {activeTab === 'm37-38-test-suite' && <Milestone37to38TestSuite />}
+
         {/* Adaptive Resolution Manager 4K UHD Surface */}
         {activeTab === 'adaptive-resolution' && <AdaptiveResolutionSurface />}
 

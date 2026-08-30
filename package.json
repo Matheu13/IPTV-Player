@@ -11,6 +11,7 @@
     "test:m1": "tsx scripts/milestone1_tests.ts",
     "test:m2": "tsx scripts/milestone2_tests.ts",
     "test:m3": "tsx scripts/milestone3_tests.ts",
+    "test:phase3": "tsx scripts/phase3_automated_tests.ts",
     "test:all": "tsx scripts/milestone1_tests.ts && tsx scripts/milestone2_tests.ts && tsx scripts/milestone3_tests.ts",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",

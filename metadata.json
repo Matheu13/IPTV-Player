@@ -1,6 +1,6 @@
 {
   "name": "IPTV Player & Diagnostics",
-  "description": "IPTV Player Suite - Multi-Source Favorites & Watch History (M29), Streaming XMLTV Parser & SQLite B-Tree Indexed EPG (M30), Unified 10k+ Channel Virtualization UI, Spatial Audio 3D Renderer (M28), Forensic Watermarking (M27), SCTE-35 DAI (M24), Multi-Room PTP Sync (M25), and Hybrid RF Frontend (M26)",
+  "description": "Cinematic Command OS IPTV Player Suite with multi-source failover, hardware-accelerated playback pipeline, multi-density EPG & channel virtualization, and advanced diagnostics.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
