@@ -25,6 +25,8 @@ import { Focusable } from '../components/Focusable';
 import { ChannelRow, ChannelRowData } from '../components/ChannelRow';
 import { SourceBadge } from '../components/SourceBadge';
 import { LoadingState, EmptyState, CachedDataBanner } from '../components/VisualStates';
+import { VideoPlayerShell } from '../components/VideoPlayerShell';
+import { usePlayback } from '../context/PlaybackContext';
 import { globalUnifiedIptvEngine } from '../../lib/unifiedIptvEngine';
 
 interface LiveTVScreenProps {
@@ -36,6 +38,8 @@ export const LiveTVScreen: React.FC<LiveTVScreenProps> = ({
   onSelectChannel,
   isTvMode = false,
 }) => {
+  const { state: playbackState, playChannel, setPresentationMode } = usePlayback();
+
   // State from unified engine
   const [channels, setChannels] = useState<ChannelRowData[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
@@ -44,14 +48,10 @@ export const LiveTVScreen: React.FC<LiveTVScreenProps> = ({
   const [selectedSourceId, setSelectedSourceId] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeChannel, setActiveChannel] = useState<ChannelRowData | null>(null);
-  const [isPlaying, setIsPlaying] = useState<boolean>(true);
-  const [isMuted, setIsMuted] = useState<boolean>(false);
-  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [isLoadingChannels, setIsLoadingChannels] = useState<boolean>(false);
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [showOnlyFavorites, setShowOnlyFavorites] = useState<boolean>(false);
 
-  const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Initialize dataset from engine
@@ -91,6 +91,7 @@ export const LiveTVScreen: React.FC<LiveTVScreenProps> = ({
         setCategories(['All', ...globalUnifiedIptvEngine.getCategories()]);
         setSources(globalUnifiedIptvEngine.getSources());
         setActiveChannel((prev) => {
+          if (playbackState.currentChannel) return playbackState.currentChannel;
           if (prev && mapped.some((m) => m.id === prev.id)) return prev;
           return mapped[0] || null;
         });
@@ -104,7 +105,21 @@ export const LiveTVScreen: React.FC<LiveTVScreenProps> = ({
     updateChannels();
     const unsubscribe = globalUnifiedIptvEngine.subscribe(updateChannels);
     return () => unsubscribe();
-  }, []);
+  }, [playbackState.currentChannel]);
+
+  // Initial playback setup if none is active
+  useEffect(() => {
+    if (!playbackState.currentChannel && channels.length > 0) {
+      playChannel(channels[0], 'embedded');
+    }
+  }, [channels, playbackState.currentChannel, playChannel]);
+
+  // Keep activeChannel in sync when playback state changes externally
+  useEffect(() => {
+    if (playbackState.currentChannel) {
+      setActiveChannel(playbackState.currentChannel);
+    }
+  }, [playbackState.currentChannel]);
 
   // Filter channels based on Search, Category, Source, and Favorites
   const filteredChannels = useMemo(() => {
@@ -126,7 +141,7 @@ export const LiveTVScreen: React.FC<LiveTVScreenProps> = ({
   // Handle Channel Playback
   const handleSelectChannel = (channel: ChannelRowData) => {
     setActiveChannel(channel);
-    setIsPlaying(true);
+    playChannel(channel, 'embedded');
     if (onSelectChannel) {
       onSelectChannel(channel);
     }
@@ -145,14 +160,7 @@ export const LiveTVScreen: React.FC<LiveTVScreenProps> = ({
     globalUnifiedIptvEngine.toggleFavorite(channelId);
   };
 
-  const toggleFullscreen = () => {
-    if (!containerRef.current) return;
-    if (!document.fullscreenElement) {
-      containerRef.current.requestFullscreen?.().then(() => setIsFullscreen(true)).catch(() => {});
-    } else {
-      document.exitFullscreen?.().then(() => setIsFullscreen(false)).catch(() => {});
-    }
-  };
+  const currentDisplayChannel = playbackState.currentChannel || activeChannel;
 
   return (
     <div
@@ -307,63 +315,11 @@ export const LiveTVScreen: React.FC<LiveTVScreenProps> = ({
 
         {/* Right Column: Hero Video Player & Detailed EPG (Width 440px on large screens) */}
         <div className="w-full lg:w-[440px] xl:w-[480px] bg-[#090d16] flex flex-col shrink-0 overflow-y-auto">
-          {activeChannel ? (
+          {currentDisplayChannel ? (
             <div className="flex flex-col h-full">
               {/* Video Viewport Container */}
-              <div className="relative aspect-video bg-black rounded-b-xl overflow-hidden shadow-2xl border-b border-white/10 group">
-                <video
-                  ref={videoRef}
-                  src={activeChannel.streamUrl}
-                  autoPlay
-                  playsInline
-                  muted={isMuted}
-                  className="w-full h-full object-contain"
-                />
-
-                {/* Live Glass Header Overlay */}
-                <div className="absolute top-2 left-2 right-2 flex items-center justify-between pointer-events-none">
-                  <div className="flex items-center gap-1.5 px-2 py-0.5 bg-red-600 text-white rounded text-[10px] font-black tracking-wider shadow-lg animate-pulse">
-                    <span>● LIVE</span>
-                  </div>
-                  {activeChannel.is8k && (
-                    <div className="px-2 py-0.5 bg-amber-500/90 text-black font-extrabold rounded text-[10px] tracking-wider shadow-lg">
-                      8K UHD DIRECT
-                    </div>
-                  )}
-                  {activeChannel.is4k && !activeChannel.is8k && (
-                    <div className="px-2 py-0.5 bg-sky-500/90 text-black font-extrabold rounded text-[10px] tracking-wider shadow-lg">
-                      4K UHD 60FPS
-                    </div>
-                  )}
-                </div>
-
-                {/* Floating Glass Control Bar on Hover */}
-                <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/90 via-black/50 to-transparent flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setIsPlaying(!isPlaying)}
-                      className="p-1.5 rounded-full bg-white/20 hover:bg-white/40 text-white transition-colors"
-                    >
-                      {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 fill-white" />}
-                    </button>
-                    <button
-                      onClick={() => setIsMuted(!isMuted)}
-                      className="p-1.5 rounded-full bg-white/20 hover:bg-white/40 text-white transition-colors"
-                    >
-                      {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-                    </button>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={toggleFullscreen}
-                      className="p-1.5 rounded-full bg-white/20 hover:bg-white/40 text-white transition-colors"
-                      title="Toggle Fullscreen"
-                    >
-                      {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
+              <div className="p-3 pb-0">
+                <VideoPlayerShell forceMode="embedded" className="shadow-2xl" />
               </div>
 
               {/* Active Channel Details & Comprehensive EPG */}
@@ -372,33 +328,42 @@ export const LiveTVScreen: React.FC<LiveTVScreenProps> = ({
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <h2 className="text-lg font-extrabold text-white tracking-tight">
-                      {activeChannel.name}
+                      {currentDisplayChannel.name}
                     </h2>
                     <div className="flex items-center gap-2 mt-1">
                       <span className="text-xs font-mono text-sky-400 font-bold">
-                        {activeChannel.category || 'General'}
+                        {currentDisplayChannel.category || 'General'}
                       </span>
                       <span className="text-xs text-slate-400">•</span>
-                      {activeChannel.sourceName && (
-                        <SourceBadge sourceName={activeChannel.sourceName} size="sm" />
+                      {currentDisplayChannel.sourceName && (
+                        <SourceBadge sourceName={currentDisplayChannel.sourceName} size="sm" />
                       )}
                     </div>
                   </div>
 
-                  <button
-                    onClick={() => handleToggleFavorite(activeChannel.id)}
-                    className={`p-2 rounded-lg border transition-colors ${
-                      favorites.has(activeChannel.id) || activeChannel.isFavorite
-                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                        : 'bg-slate-800/80 text-slate-400 border-white/5 hover:text-white'
-                    }`}
-                  >
-                    <Star
-                      className={`w-5 h-5 ${
-                        favorites.has(activeChannel.id) || activeChannel.isFavorite ? 'fill-amber-400' : ''
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => setPresentationMode('fullscreen')}
+                      className="p-2 rounded-lg bg-slate-800/80 text-slate-300 hover:text-white hover:bg-slate-700 border border-white/5 transition-colors"
+                      title="Expand to Fullscreen"
+                    >
+                      <Maximize2 className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleToggleFavorite(currentDisplayChannel.id)}
+                      className={`p-2 rounded-lg border transition-colors ${
+                        favorites.has(currentDisplayChannel.id) || currentDisplayChannel.isFavorite
+                          ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                          : 'bg-slate-800/80 text-slate-400 border-white/5 hover:text-white'
                       }`}
-                    />
-                  </button>
+                    >
+                      <Star
+                        className={`w-4 h-4 ${
+                          favorites.has(currentDisplayChannel.id) || currentDisplayChannel.isFavorite ? 'fill-amber-400' : ''
+                        }`}
+                      />
+                    </button>
+                  </div>
                 </div>
 
                 {/* EPG Now & Next Cards */}
@@ -411,11 +376,11 @@ export const LiveTVScreen: React.FC<LiveTVScreenProps> = ({
                         Live Now
                       </span>
                       <span className="font-mono text-slate-300">
-                        {activeChannel.nowProgramme?.start} - {activeChannel.nowProgramme?.stop}
+                        {currentDisplayChannel.nowProgramme?.start} - {currentDisplayChannel.nowProgramme?.stop}
                       </span>
                     </div>
                     <div className="text-sm font-bold text-white">
-                      {activeChannel.nowProgramme?.title}
+                      {currentDisplayChannel.nowProgramme?.title}
                     </div>
                     <div className="mt-2 w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
                       <div className="h-full bg-gradient-to-r from-sky-500 to-indigo-500 rounded-full w-[45%]" />
@@ -427,11 +392,11 @@ export const LiveTVScreen: React.FC<LiveTVScreenProps> = ({
                     <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                       <span>Up Next</span>
                       <span className="font-mono text-slate-400">
-                        {activeChannel.nextProgramme?.start} - {activeChannel.nextProgramme?.stop}
+                        {currentDisplayChannel.nextProgramme?.start} - {currentDisplayChannel.nextProgramme?.stop}
                       </span>
                     </div>
                     <div className="text-sm font-semibold text-slate-200">
-                      {activeChannel.nextProgramme?.title}
+                      {currentDisplayChannel.nextProgramme?.title}
                     </div>
                   </GlassPanel>
                 </div>

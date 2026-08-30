@@ -121,9 +121,43 @@ export const CachedDataBanner: React.FC<{
   );
 };
 
+export const OfflineState: React.FC<{
+  title?: string;
+  message?: string;
+  onReconnect?: () => void;
+  className?: string;
+}> = ({
+  title = 'No Network Connection',
+  message = 'Operating in offline cache mode. Previously loaded schedules and channels remain accessible.',
+  onReconnect,
+  className = '',
+}) => {
+  return (
+    <GlassPanel className={`p-8 text-center flex flex-col items-center justify-center space-y-4 border-amber-500/30 bg-amber-950/10 ${className}`}>
+      <div className="w-12 h-12 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
+        <WifiOff className="w-6 h-6" />
+      </div>
+      <div className="space-y-1 max-w-sm">
+        <h4 className="text-base font-semibold text-amber-200">{title}</h4>
+        <p className="text-xs text-slate-300 leading-relaxed">{message}</p>
+      </div>
+      {onReconnect && (
+        <button
+          onClick={onReconnect}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-slate-950 text-xs font-bold shadow-lg shadow-amber-950/50 transition-colors"
+        >
+          <RefreshCw className="w-3.5 h-3.5" />
+          <span>Check Connection</span>
+        </button>
+      )}
+    </GlassPanel>
+  );
+};
+
 export const VisualStates = {
   Loading: LoadingState,
   Empty: EmptyState,
   Error: ErrorState,
+  Offline: OfflineState,
   CachedData: CachedDataBanner,
 };

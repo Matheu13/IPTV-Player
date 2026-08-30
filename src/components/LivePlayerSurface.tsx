@@ -60,7 +60,7 @@ const SAMPLE_CHANNELS = [
     name: 'UK: BBC One London HD',
     category: 'UK | ENTERTAINMENT',
     format: 'm3u8' as const,
-    streamUrl: 'https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_16x9/bipbop_16x9_variant.m3u8',
+    streamUrl: 'https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8',
     tvgId: 'BBCOne.uk',
     currentShow: 'Planet Earth: Nature Special',
     nextShow: 'BBC News at Ten',
@@ -273,6 +273,14 @@ export const LivePlayerSurface: React.FC = () => {
     });
     return () => unsub();
   }, []);
+
+  // Sync volume and mute with video element
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.volume = Math.max(0, Math.min(1, engineState.volume / 100));
+      videoRef.current.muted = engineState.muted;
+    }
+  }, [engineState.volume, engineState.muted]);
 
   // Handle HLS / MPEG-TS / Video Attachment
   // Helper to ensure streams avoid Mixed Content and CORS issues

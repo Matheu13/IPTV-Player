@@ -81,6 +81,24 @@ const AppShellContent: React.FC = () => {
     setActiveTab('live');
   };
 
+  const handlePlayMedia = (url: string, title: string, metadata?: any) => {
+    playChannel({
+      id: metadata?.streamId?.toString() || `media-${Date.now()}`,
+      channelNumber: 1,
+      name: title,
+      streamUrl: url,
+      category: metadata?.genre || 'Video on Demand',
+      is4k: true,
+      isHdr: true,
+      isFavorite: false,
+      nowProgramme: {
+        title,
+        start: '00:00',
+        stop: metadata?.duration || '02:00',
+      },
+    }, 'fullscreen');
+  };
+
   return (
     <div className="flex h-screen w-screen bg-[#080b11] text-slate-100 font-sans overflow-hidden select-none">
       {/* 1. Navigation Shell: Top Bar for TV, Sidebar Rail for Desktop */}
@@ -115,13 +133,13 @@ const AppShellContent: React.FC = () => {
 
         {activeTab === 'movies' && (
           <div className="flex-1 overflow-y-auto bg-[#080b11]">
-            <VodSeriesCatalog initialTab="movies" />
+            <VodSeriesCatalog initialTab="movies" onPlayMedia={handlePlayMedia} />
           </div>
         )}
 
         {activeTab === 'series' && (
           <div className="flex-1 overflow-y-auto bg-[#080b11]">
-            <VodSeriesCatalog initialTab="series" />
+            <VodSeriesCatalog initialTab="series" onPlayMedia={handlePlayMedia} />
           </div>
         )}
 
@@ -149,12 +167,12 @@ const AppShellContent: React.FC = () => {
           </div>
         )}
 
-        {/* Global Persistent Video Player Shell (Handles mini-player / fullscreen / PIP across views) */}
-        {activeTab !== 'live' && playbackState.presentationMode === 'embedded' ? (
+        {/* Global Persistent Video Player Shell (Handles mini-player / fullscreen across all views) */}
+        {playbackState.presentationMode === 'fullscreen' ? (
+          <VideoPlayerShell forceMode="fullscreen" />
+        ) : activeTab !== 'live' && playbackState.presentationMode !== 'hidden' && playbackState.currentChannel ? (
           <VideoPlayerShell forceMode="mini_player" />
-        ) : (
-          <VideoPlayerShell />
-        )}
+        ) : null}
       </main>
 
       {/* 3. Mobile Bottom Navigation (Visible on screen < 768px) */}

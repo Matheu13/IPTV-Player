@@ -49,14 +49,14 @@ export const PlaybackProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     isPlaying: false,
     isBuffering: false,
     isMuted: false,
-    volume: 85,
+    volume: 90,
     quality: 'auto',
     activeAudioTrack: 'und',
     activeSubtitleTrack: 'off',
     audioTracks: [
-      { id: 'eng', label: 'English (Stereo)', language: 'en' },
-      { id: 'fra', label: 'French (5.1 Surround)', language: 'fr' },
-      { id: 'und', label: 'Main Broadcast Audio', language: 'und' },
+      { id: '0', label: 'Main Broadcast Audio (Stereo)', language: 'und' },
+      { id: '1', label: 'English Surround 5.1', language: 'en' },
+      { id: '2', label: 'Commentary & Ambient Track', language: 'en' },
     ],
     subtitleTracks: [
       { id: 'off', label: 'Off', language: 'off' },
@@ -124,11 +124,19 @@ export const PlaybackProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const setVolume = (vol: number) => {
-    setState((prev) => ({ ...prev, volume: vol, isMuted: vol === 0 }));
+    const clamped = Math.max(0, Math.min(100, vol));
+    setState((prev) => ({ ...prev, volume: clamped, isMuted: clamped === 0 }));
   };
 
   const toggleMute = () => {
-    setState((prev) => ({ ...prev, isMuted: !prev.isMuted }));
+    setState((prev) => {
+      const willMute = !prev.isMuted;
+      return {
+        ...prev,
+        isMuted: willMute,
+        volume: willMute ? prev.volume : (prev.volume === 0 ? 80 : prev.volume),
+      };
+    });
   };
 
   const setQuality = (quality: 'auto' | '1080p' | '720p' | '480p' | '4k') => {
