@@ -47,10 +47,12 @@ import { Milestone29TestSuite } from './components/Milestone29TestSuite';
 import { Milestone30TestSuite } from './components/Milestone30TestSuite';
 import { Milestone31TestSuite } from './components/Milestone31TestSuite';
 import { Milestone32TestSuite } from './components/Milestone32TestSuite';
+import { MilestoneFirestickVerification } from './components/MilestoneFirestickVerification';
 import { Milestone33TestSuite } from './components/Milestone33TestSuite';
 import { Milestone34TestSuite } from './components/Milestone34TestSuite';
 import { SourceMonitorDashboard } from './components/SourceMonitorDashboard';
 import { Milestone37to38TestSuite } from './components/Milestone37to38TestSuite';
+import { Milestone42TestSuite } from './components/Milestone42TestSuite';
 import { SpatialAudioSurface } from './components/SpatialAudioSurface';
 import { MilestoneUiRequirementsTestSuite } from './components/MilestoneUiRequirementsTestSuite';
 import { UnifiedIptvSurface } from './components/UnifiedIptvSurface';
@@ -96,6 +98,7 @@ import {
   Smartphone,
   Monitor,
   Sparkles,
+  Share2,
 } from 'lucide-react';
 
 export default function App() {
@@ -103,11 +106,13 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<
     | 'source-monitor'
     | 'm37-38-test-suite'
+    | 'm42-test-suite'
     | 'adaptive-resolution'
     | 'unified-iptv'
     | 'm34-test-suite'
     | 'm33-test-suite'
     | 'm32-test-suite'
+    | 'firestick-test-suite'
     | 'm31-test-suite'
     | 'm30-test-suite'
     | 'm29-test-suite'
@@ -305,6 +310,19 @@ export default function App() {
             <Layers className="w-4 h-4 text-indigo-400" /> M37-38: Source Monitor (10)
           </button>
 
+          {/* Milestone 42 Adaptive P2P Mesh Test Suite */}
+          <button
+            id="tab-m42-test-suite"
+            onClick={() => setActiveTab('m42-test-suite')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'm42-test-suite'
+                ? 'border-cyan-500 bg-slate-800 text-cyan-300 font-semibold shadow-inner'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Share2 className="w-4 h-4 text-cyan-400" /> M42: Adaptive P2P Mesh (8)
+          </button>
+
           {/* Adaptive Resolution Manager - 4K UHD & HW Decoder Auto-Default */}
           <button
             id="tab-adaptive-resolution"
@@ -368,6 +386,18 @@ export default function App() {
             }`}
           >
             <Tv className="w-4 h-4 text-indigo-400" /> M32: TV &amp; Fire Remote (9)
+          </button>
+
+          <button
+            id="tab-firestick-test-suite"
+            onClick={() => setActiveTab('firestick-test-suite')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'firestick-test-suite'
+                ? 'border-amber-500 bg-slate-800 text-amber-300 font-semibold shadow-inner'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Zap className="w-4 h-4 text-amber-400" /> Fire TV Stick Verification (6)
           </button>
 
           {/* Milestone 29: Favorites & Watch History */}
@@ -1101,6 +1131,7 @@ export default function App() {
         {/* Source Monitor Dashboard & M37-38 Test Suite */}
         {activeTab === 'source-monitor' && <SourceMonitorDashboard />}
         {activeTab === 'm37-38-test-suite' && <Milestone37to38TestSuite />}
+        {activeTab === 'm42-test-suite' && <Milestone42TestSuite />}
 
         {/* Adaptive Resolution Manager 4K UHD Surface */}
         {activeTab === 'adaptive-resolution' && <AdaptiveResolutionSurface />}
@@ -1109,6 +1140,7 @@ export default function App() {
         {activeTab === 'm34-test-suite' && <Milestone34TestSuite />}
         {activeTab === 'm33-test-suite' && <Milestone33TestSuite />}
         {activeTab === 'm32-test-suite' && <Milestone32TestSuite />}
+        {activeTab === 'firestick-test-suite' && <MilestoneFirestickVerification />}
         {activeTab === 'm31-test-suite' && <Milestone31TestSuite />}
         {activeTab === 'm30-test-suite' && <Milestone30TestSuite />}
         {activeTab === 'm29-test-suite' && <Milestone29TestSuite />}

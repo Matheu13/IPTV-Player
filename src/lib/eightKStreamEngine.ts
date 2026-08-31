@@ -1,14 +1,20 @@
 /**
- * Requirement 43: Important Distinction About 8K Stream Engine & Capability Evaluator
+ * Requirement 43 & Phase 46.5: 8K Stream Capability Evaluator & Direct Passthrough Engine
  *
- * Core Rules:
- * 1. No artificial resolution ceiling: Capability to handle 8K (4320p) streams when hardware permits.
- * 2. Does NOT require every low-end/unaccelerated device to decode 8K streams.
- * 3. 8K playback depends on hardware, codec, bitrate, framerate, HDR, OS, display, and backend.
- * 4. Capable hardware -> direct 8K playback support without artificial cap.
- * 5. Incapable hardware -> fails gracefully with clear compatibility warning & actionable diagnosis.
- * 6. Never silently transcode an 8K stream on the client or server.
- * 7. Never artificially downgrade an 8K stream unless the user explicitly selects a lower-quality adaptive stream variant.
+ * Core Policies & Terminology:
+ * 1. "The client does not transcode or re-encode streams."
+ *    (We do not make claims about whether third-party upstream providers transcode content).
+ * 2. Multi-Attribute Sustained Capability Detection:
+ *    We do NOT equate "hardware decoder exists" with "device can reliably play any 8K stream."
+ *    Capability evaluation considers:
+ *    - Codec & profile (HEVC Main 10, AV1 Main, VP9 Profile 2)
+ *    - Resolution (e.g. 7680×4320) & target frame rate (30fps / 60fps / 120fps)
+ *    - Bitrate & network throughput pipeline sustainability (>= 40-50 Mbps)
+ *    - Decoder capability & VRAM buffer tier (D3D11VA, NVDEC, MediaCodec, VideoToolbox)
+ *    - Display capability & HDR color gamut (BT.2020 / HDR10 / 10-bit)
+ *    - Platform / OS architectural limits
+ * 3. Policy: "Select the highest appropriate stream the device and playback pipeline can realistically sustain."
+ * 4. Fails gracefully with clear compatibility diagnostics and zero artificial client caps.
  */
 
 import { DeviceCapabilityDetector, DevicePlatformProfile } from './deviceCapabilityDetector';
@@ -19,6 +25,8 @@ export interface StreamResolutionMetadata {
   framerate?: number;
   bitrateBps?: number;
   codec?: string; // 'hevc' | 'av1' | 'vp9' | 'h264' | etc.
+  profile?: string; // e.g. 'Main 10', 'High', 'Main'
+  level?: string | number; // e.g. '6.1', '5.2'
   isHdr?: boolean;
   hdrFormat?: 'HDR10' | 'HLG' | 'DolbyVision' | 'SDR';
   streamUrl: string;
@@ -39,19 +47,23 @@ export interface CompatibilityWarning {
 export interface EightKPlaybackDecision {
   is8K: boolean;
   canDirectPlay: boolean;
+  clientTranscodingDisabled: true; // The client does not transcode or re-encode streams
   transcodingForbidden: true;
   silentlyDowngraded: false;
   selectedVariantUrl: string;
   warning?: CompatibilityWarning;
   factors: {
     hardwareAcceleration: boolean;
+    decoderReliableFor8K: boolean;
     codecSupported: boolean;
+    codecProfileLevel: string;
     maxHwDecodeResolution: string;
     displayResolution: string;
     estimatedBandwidthMbps: number;
     bandwidthSufficient: boolean;
     framerateViable: boolean;
     hdrMatch: boolean;
+    pipelineSustainabilityScore: number; // 0 to 100
   };
 }
 
@@ -132,21 +144,35 @@ export class EightKStreamEngine {
     const isHw8kCapable = hwAccelerated && (maxHw === '8K' || maxHw === '4K'); // 8K pipeline or high-tier hardware
     const isCodecSupported = isHevcOrAv1 || targetCodec.includes('264');
 
+    const profileLevelStr = `${stream.codec || 'HEVC'} ${stream.profile || 'Main 10'} Level ${stream.level || '6.1'}`;
+    const decoderReliableFor8K = hwAccelerated && maxHw === '8K' && (stream.framerate || 60) <= 60;
+
+    let pipelineSustainabilityScore = 100;
+    if (!hwAccelerated) pipelineSustainabilityScore -= 50;
+    if (maxHw !== '8K') pipelineSustainabilityScore -= 25;
+    if (!bandwidthSufficient) pipelineSustainabilityScore -= 20;
+    if ((stream.framerate || 60) > 60) pipelineSustainabilityScore -= 10;
+    pipelineSustainabilityScore = Math.max(0, pipelineSustainabilityScore);
+
     const factors = {
       hardwareAcceleration: hwAccelerated,
+      decoderReliableFor8K,
       codecSupported: isCodecSupported,
+      codecProfileLevel: profileLevelStr,
       maxHwDecodeResolution: maxHw,
       displayResolution: `${profile.display.physicalWidth}×${profile.display.physicalHeight}`,
       estimatedBandwidthMbps: profile.estimatedBandwidthMbps,
       bandwidthSufficient,
       framerateViable: (stream.framerate || 60) <= 60,
       hdrMatch: stream.isHdr ? profile.display.hdr.highDynamicRange : true,
+      pipelineSustainabilityScore,
     };
 
     if (!is8K) {
       return {
         is8K: false,
         canDirectPlay: true,
+        clientTranscodingDisabled: true,
         transcodingForbidden: true,
         silentlyDowngraded: false,
         selectedVariantUrl: stream.streamUrl,
@@ -169,7 +195,7 @@ export class EightKStreamEngine {
           `Stream Resolution: ${stream.width} × ${stream.height} (${stream.framerate || 60} fps)`,
           `Active Decoder: ${profile.hardwareDecoderApi} (CPU Fallback)`,
           `GPU Acceleration: Inactive / Unsupported`,
-          `Policy Enforcement: Never silently transcoding 8K stream. Direct source passthrough maintained.`,
+          `Policy Enforcement: The client does not transcode or re-encode streams. Direct source passthrough maintained.`,
         ],
         suggestedAction:
           'Enable GPU hardware acceleration in settings, or explicitly select an adaptive rendition (4K UHD / 1080p FHD) if provided by your IPTV playlist.',
@@ -186,7 +212,7 @@ export class EightKStreamEngine {
           `Target Stream: 8K UHD (${stream.width} × ${stream.height})`,
           `Hardware Decoder: ${profile.hardwareDecoderApi}`,
           `Hardware Decode Limit: ${maxHw}`,
-          `Policy Enforcement: 8K stream is NOT artificially capped or transcoded.`,
+          `Policy Enforcement: The client does not transcode or re-encode streams. Stream is NOT artificially capped.`,
         ],
         suggestedAction:
           'You may proceed with direct 8K playback, or switch to a 4K rendition if hardware limits cause decoder stalls.',
@@ -203,7 +229,7 @@ export class EightKStreamEngine {
           `Recommended 8K Throughput: >= 40.0 Mbps`,
           `Buffer Health: Monitoring under ABR QoS watchdog`,
         ],
-        suggestedAction: 'Playback will proceed without transcoding. If buffering occurs, select an adaptive stream variant.',
+        suggestedAction: 'The client does not transcode streams. Playback proceeds directly. If buffering occurs, select an adaptive stream variant.',
         allowsDirectPlaybackAttempt: true,
         requiresExplicitUserOverride: false,
       };
@@ -217,7 +243,7 @@ export class EightKStreamEngine {
           `Display: ${profile.display.maxDisplayResolutionLabel} (${profile.display.refreshRateHz}Hz)`,
           `Estimated Throughput: ${profile.estimatedBandwidthMbps.toFixed(1)} Mbps`,
         ],
-        suggestedAction: 'Direct 8K stream rendering active with zero transcoding and zero resolution ceiling.',
+        suggestedAction: 'Direct 8K stream rendering active with zero client transcoding and zero artificial resolution ceiling.',
         allowsDirectPlaybackAttempt: true,
         requiresExplicitUserOverride: false,
       };
@@ -226,6 +252,7 @@ export class EightKStreamEngine {
     return {
       is8K: true,
       canDirectPlay,
+      clientTranscodingDisabled: true,
       transcodingForbidden: true,
       silentlyDowngraded: false,
       selectedVariantUrl: stream.streamUrl,

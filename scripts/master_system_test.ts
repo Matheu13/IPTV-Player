@@ -24,6 +24,7 @@ import { runMilestone32Tests } from './milestone_32_tests';
 import { runMilestone33Tests } from './milestone_33_tests';
 import { runMilestone34Tests } from './milestone_34_tests';
 import { runMilestone37to38TestSuite } from './milestone_37_38_tests';
+import { runMilestone42TestSuite } from './milestone_42_tests';
 import { runAdaptiveResolutionManagerTestSuite } from './adaptive_resolution_manager_tests';
 import { runDeviceCapabilityDetectorTestSuite } from './device_capability_detector_tests';
 import { runReq43to45TestSuite } from './req_43_to_45_tests';
@@ -56,6 +57,7 @@ export async function runAllSystemTests() {
     { name: 'M33: Android Mobile Touch Gestures & 4K Surface', fn: runMilestone33Tests },
     { name: 'M34: Windows Desktop D3D11 Hardware & Hotkeys', fn: runMilestone34Tests },
     { name: 'M37-M38: Source-Specific Refresh & Provider Status', fn: runMilestone37to38TestSuite },
+    { name: 'M42: Adaptive P2P Stream Mesh & Peer Cache Segment Scheduler', fn: runMilestone42TestSuite },
     { name: 'Req 42: Device Capability Detection (Codecs, HW, HDR, Display)', fn: runDeviceCapabilityDetectorTestSuite },
     { name: 'Req 43-45: 8K Distinction, Minimal Dependencies, & Security Boundary', fn: runReq43to45TestSuite },
     { name: 'ARM: Adaptive Resolution Manager (4K HW Default)', fn: runAdaptiveResolutionManagerTestSuite },
