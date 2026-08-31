@@ -25,6 +25,7 @@ export interface PlayerEngineState {
   streamUrl: string;
   volume: number;
   muted: boolean;
+  isAutoplayMuted: boolean;
   hwdec: HwdecMode;
   filters: VideoFilterSettings;
   audioTrackId: number;
@@ -46,6 +47,7 @@ export class PlayerEngine {
     streamUrl: '',
     volume: 100,
     muted: false,
+    isAutoplayMuted: false,
     hwdec: 'd3d11va',
     filters: {
       deinterlace: 'bwdif',
@@ -64,11 +66,100 @@ export class PlayerEngine {
     activeRenderer: 'HLS_JS',
   };
 
+  private attachedMediaElement: HTMLMediaElement | null = null;
   private stallTimer: any = null;
   private listeners: ((state: PlayerEngineState) => void)[] = [];
 
   constructor() {
     // Initial sync
+    if (typeof window !== 'undefined') {
+      const unlockAudio = () => {
+        if (this.state.isAutoplayMuted || (this.attachedMediaElement && this.attachedMediaElement.muted && !this.state.muted)) {
+          this.ensureAudioUnmuted();
+        }
+      };
+      window.addEventListener('click', unlockAudio, { passive: true });
+      window.addEventListener('keydown', unlockAudio, { passive: true });
+    }
+  }
+
+  /**
+   * Links an HTML5 media element (e.g. video / audio) to the playback engine.
+   * Synchronizes volume, unmuted status, and media source buffers.
+   */
+  public attachMediaElement(element: HTMLMediaElement | null) {
+    this.attachedMediaElement = element;
+    if (element) {
+      // Sync current volume and muted state to element
+      element.volume = Math.max(0, Math.min(1, this.state.volume / 100));
+      element.muted = this.state.muted;
+
+      // Handle pause/play events to stay in sync
+      element.onplay = () => {
+        if (!this.state.isPlaying) {
+          this.state.isPlaying = true;
+          this.notify();
+        }
+      };
+
+      element.onvolumechange = () => {
+        if (!this.state.isAutoplayMuted) {
+          const newVol = Math.round(element.volume * 100);
+          if (this.state.volume !== newVol || this.state.muted !== element.muted) {
+            this.state.volume = newVol;
+            this.state.muted = element.muted;
+            this.notify();
+          }
+        }
+      };
+    }
+  }
+
+  public getMediaElement(): HTMLMediaElement | null {
+    return this.attachedMediaElement;
+  }
+
+  /**
+   * Ensures the audio element or media buffer is initialized and unmuted.
+   * Handles browser Autoplay Policies gracefully by falling back to muted playback
+   * and notifying listeners if unmuted autoplay is temporarily blocked.
+   */
+  public async ensureAudioUnmuted(targetElement?: HTMLMediaElement): Promise<boolean> {
+    const el = targetElement || this.attachedMediaElement;
+    if (!el) return false;
+
+    try {
+      el.muted = false;
+      el.volume = Math.max(0.1, this.state.volume / 100);
+      this.state.muted = false;
+      this.state.isAutoplayMuted = false;
+      globalMpvBridge.sendCommand('set_property', ['mute', false]);
+      globalMpvBridge.sendCommand('set_property', ['volume', this.state.volume]);
+      this.notify();
+      return true;
+    } catch (err) {
+      console.warn('[PlayerEngine] Audio unmute restricted by browser policy:', err);
+      el.muted = true;
+      this.state.isAutoplayMuted = true;
+      this.notify();
+      return false;
+    }
+  }
+
+  /**
+   * Maintains continuous audio/video playback synchronization during
+   * transitions between embedded layout and full-screen modes.
+   */
+  public syncFullscreenTransition(isFullscreen: boolean) {
+    const el = this.attachedMediaElement;
+    if (el) {
+      // Ensure volume and unmuted state remain consistent during DOM resizing
+      el.volume = Math.max(0, Math.min(1, this.state.volume / 100));
+      el.muted = this.state.muted || this.state.isAutoplayMuted;
+      if (this.state.isPlaying && el.paused) {
+        el.play().catch((e) => console.warn('[PlayerEngine] Fullscreen resume warning:', e));
+      }
+    }
   }
 
   public subscribe(fn: (state: PlayerEngineState) => void): () => void {
@@ -142,6 +233,12 @@ export class PlayerEngine {
     this.state.volume = Math.max(0, Math.min(100, vol));
     if (this.state.volume > 0) this.state.muted = false;
     globalMpvBridge.sendCommand('set_property', ['volume', this.state.volume]);
+    this.notify();
+  }
+
+  public setMuted(muted: boolean) {
+    this.state.muted = muted;
+    globalMpvBridge.sendCommand('set_property', ['mute', this.state.muted]);
     this.notify();
   }
 

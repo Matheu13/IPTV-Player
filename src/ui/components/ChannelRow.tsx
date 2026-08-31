@@ -19,11 +19,13 @@ export interface ChannelRowData {
     start: string;
     stop: string;
     progressPercent?: number;
+    description?: string;
   };
   nextProgramme?: {
     title: string;
     start: string;
     stop: string;
+    description?: string;
   };
   resolution?: string;
   isHdr?: boolean;

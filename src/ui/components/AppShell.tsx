@@ -2,9 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { NavigationRail, NavTabId } from './NavigationRail';
 import { HomeScreen } from '../screens/HomeScreen';
 import { LiveTVScreen } from '../screens/LiveTVScreen';
-import { VodSeriesCatalog } from '../../components/VodSeriesCatalog';
-import { EpgGridSurface } from '../../components/EpgGridSurface';
-import { SourceMonitorDashboard } from '../../components/SourceMonitorDashboard';
+import { MoviesScreen } from '../screens/MoviesScreen';
+import { SeriesScreen } from '../screens/SeriesScreen';
+import { EpgScreen } from '../screens/EpgScreen';
+import { FavoritesScreen } from '../screens/FavoritesScreen';
+import { SearchScreen } from '../screens/SearchScreen';
+import { SettingsScreen } from '../screens/SettingsScreen';
 import { AdvancedDiagnosticsPanel } from '../../components/AdvancedDiagnosticsPanel';
 import { DesignSystemShowcase } from './DesignSystemShowcase';
 import { VideoPlayerShell } from './VideoPlayerShell';
@@ -124,30 +127,22 @@ const AppShellContent: React.FC = () => {
           />
         )}
 
-        {(activeTab === 'live' || activeTab === 'favorites' || activeTab === 'search') && (
+        {activeTab === 'live' && (
           <LiveTVScreen
             onSelectChannel={handleSelectChannel}
             isTvMode={isTvMode}
           />
         )}
 
-        {activeTab === 'movies' && (
-          <div className="flex-1 overflow-y-auto bg-[#080b11]">
-            <VodSeriesCatalog initialTab="movies" onPlayMedia={handlePlayMedia} />
-          </div>
-        )}
+        {activeTab === 'movies' && <MoviesScreen />}
 
-        {activeTab === 'series' && (
-          <div className="flex-1 overflow-y-auto bg-[#080b11]">
-            <VodSeriesCatalog initialTab="series" onPlayMedia={handlePlayMedia} />
-          </div>
-        )}
+        {activeTab === 'series' && <SeriesScreen />}
 
-        {activeTab === 'epg' && (
-          <div className="flex-1 overflow-y-auto bg-[#080b11]">
-            <EpgGridSurface />
-          </div>
-        )}
+        {activeTab === 'epg' && <EpgScreen />}
+
+        {activeTab === 'favorites' && <FavoritesScreen />}
+
+        {activeTab === 'search' && <SearchScreen />}
 
         {activeTab === 'showcase' && (
           <div className="flex-1 overflow-y-auto bg-[#080b11]">
@@ -155,11 +150,7 @@ const AppShellContent: React.FC = () => {
           </div>
         )}
 
-        {activeTab === 'settings' && (
-          <div className="flex-1 overflow-y-auto bg-[#080b11]">
-            <SourceMonitorDashboard />
-          </div>
-        )}
+        {activeTab === 'settings' && <SettingsScreen />}
 
         {activeTab === 'diagnostics' && (
           <div className="flex-1 overflow-y-auto bg-[#080b11] p-4">

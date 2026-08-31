@@ -177,6 +177,7 @@ export interface UnifiedSeries {
   categoryId: string;
   categoryName: string;
   coverUrl: string;
+  backdropUrl?: string;
   plot: string;
   cast: string;
   director: string;
@@ -185,6 +186,8 @@ export interface UnifiedSeries {
   rating: string;
   rating5: number;
   seasons: UnifiedSeason[];
+  seasonCount?: number;
+  episodeCount?: number;
   isFavorite?: boolean;
 }
 
