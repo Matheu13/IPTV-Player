@@ -48,11 +48,14 @@ import { Milestone30TestSuite } from './components/Milestone30TestSuite';
 import { Milestone31TestSuite } from './components/Milestone31TestSuite';
 import { Milestone32TestSuite } from './components/Milestone32TestSuite';
 import { MilestoneFirestickVerification } from './components/MilestoneFirestickVerification';
+import { FirestickDiagnosticsDashboard } from './components/FirestickDiagnosticsDashboard';
+import { Phase47PlaybackReliabilitySurface } from './components/Phase47PlaybackReliabilitySurface';
 import { Milestone33TestSuite } from './components/Milestone33TestSuite';
 import { Milestone34TestSuite } from './components/Milestone34TestSuite';
 import { SourceMonitorDashboard } from './components/SourceMonitorDashboard';
 import { Milestone37to38TestSuite } from './components/Milestone37to38TestSuite';
 import { Milestone42TestSuite } from './components/Milestone42TestSuite';
+import { Phase48SourceValidation } from './components/Phase48SourceValidation';
 import { SpatialAudioSurface } from './components/SpatialAudioSurface';
 import { MilestoneUiRequirementsTestSuite } from './components/MilestoneUiRequirementsTestSuite';
 import { UnifiedIptvSurface } from './components/UnifiedIptvSurface';
@@ -104,6 +107,7 @@ import {
 export default function App() {
   const [appMode, setAppMode] = useState<'cinematic_os' | 'diagnostic_matrix'>('cinematic_os');
   const [activeTab, setActiveTab] = useState<
+    | 'phase48-source-validation'
     | 'source-monitor'
     | 'm37-38-test-suite'
     | 'm42-test-suite'
@@ -112,6 +116,7 @@ export default function App() {
     | 'm34-test-suite'
     | 'm33-test-suite'
     | 'm32-test-suite'
+    | 'phase47-playback'
     | 'firestick-test-suite'
     | 'm31-test-suite'
     | 'm30-test-suite'
@@ -284,6 +289,19 @@ export default function App() {
 
         {/* Tab Navigation */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex space-x-1 overflow-x-auto pb-1 text-xs font-medium scrollbar-thin">
+          {/* Phase 48 Source Ingestion & Metadata Validation */}
+          <button
+            id="tab-phase48-source-validation"
+            onClick={() => setActiveTab('phase48-source-validation')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'phase48-source-validation'
+                ? 'border-sky-500 bg-slate-800 text-sky-300 font-semibold shadow-inner'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4 text-sky-400" /> Phase 48: 14.9k Ingestion (4)
+          </button>
+
           {/* Source Monitor Dashboard (Sections 37 & 38) */}
           <button
             id="tab-source-monitor"
@@ -386,6 +404,18 @@ export default function App() {
             }`}
           >
             <Tv className="w-4 h-4 text-indigo-400" /> M32: TV &amp; Fire Remote (9)
+          </button>
+
+          <button
+            id="tab-phase47-playback"
+            onClick={() => setActiveTab('phase47-playback')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg transition border-b-2 whitespace-nowrap ${
+              activeTab === 'phase47-playback'
+                ? 'border-indigo-500 bg-slate-800 text-indigo-300 font-semibold shadow-inner'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Activity className="w-4 h-4 text-indigo-400" /> Phase 47: Playback Reliability
           </button>
 
           <button
@@ -1128,6 +1158,9 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full">
+        {/* Phase 48 Source Ingestion & Metadata Validation */}
+        {activeTab === 'phase48-source-validation' && <Phase48SourceValidation />}
+
         {/* Source Monitor Dashboard & M37-38 Test Suite */}
         {activeTab === 'source-monitor' && <SourceMonitorDashboard />}
         {activeTab === 'm37-38-test-suite' && <Milestone37to38TestSuite />}
@@ -1140,6 +1173,7 @@ export default function App() {
         {activeTab === 'm34-test-suite' && <Milestone34TestSuite />}
         {activeTab === 'm33-test-suite' && <Milestone33TestSuite />}
         {activeTab === 'm32-test-suite' && <Milestone32TestSuite />}
+        {activeTab === 'phase47-playback' && <Phase47PlaybackReliabilitySurface />}
         {activeTab === 'firestick-test-suite' && <MilestoneFirestickVerification />}
         {activeTab === 'm31-test-suite' && <Milestone31TestSuite />}
         {activeTab === 'm30-test-suite' && <Milestone30TestSuite />}

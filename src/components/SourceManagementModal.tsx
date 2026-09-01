@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { IptvSource, globalUnifiedIptvEngine } from '../lib/unifiedIptvEngine';
+import { globalSourceMonitorEngine, SourceType } from '../lib/sourceMonitorEngine';
+import { multiSourceOrchestrator } from '../lib/multiSourceOrchestrator';
 import {
   Server,
   Plus,
@@ -35,8 +37,41 @@ export const SourceManagementModal: React.FC<SourceManagementModalProps> = ({
     e.preventDefault();
     if (!newName.trim() || !newUrl.trim()) return;
 
-    globalUnifiedIptvEngine.addSource(newName.trim(), newUrl.trim(), newType);
+    let normalizedUrl = newUrl.trim();
+    if (!/^https?:\/\//i.test(normalizedUrl)) {
+      normalizedUrl = `http://${normalizedUrl}`;
+    }
+
+    // 1. Add to UnifiedIptvEngine
+    globalUnifiedIptvEngine.addSource(newName.trim(), normalizedUrl, newType);
     setSources(globalUnifiedIptvEngine.getState().sources);
+
+    // 2. Add to SourceMonitorEngine
+    const monitorTypeMap: Record<IptvSource['type'], SourceType> = {
+      XTREAM_CODES: 'XTREAM',
+      M3U_PLAYLIST: 'M3U',
+      STALKER_PORTAL: 'STALKER',
+      HDHOMERUN_RF: 'HDHOMERUN_RF',
+    };
+    const registered = globalSourceMonitorEngine.registerSource({
+      name: newName.trim(),
+      sourceType: monitorTypeMap[newType] || 'XTREAM',
+      baseUrl: normalizedUrl,
+      maxConnections: 2,
+      autoProbe: true,
+    });
+
+    // 3. Add to MultiSourceOrchestrator if M3U
+    if (newType === 'M3U_PLAYLIST') {
+      multiSourceOrchestrator.addOrUpdateM3USource(
+        registered.id,
+        newName.trim(),
+        350,
+        2,
+        normalizedUrl
+      );
+    }
+
     setNewName('');
     setNewUrl('');
   };

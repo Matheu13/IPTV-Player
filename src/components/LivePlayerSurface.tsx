@@ -221,6 +221,8 @@ export const LivePlayerSurface: React.FC = () => {
           baseUrl: 'http://dnsjibre.xyz:80',
           username: 'B3GC9NESBU82M3W',
           password: '2pFz3E7P3d',
+          sourceName: 'Ultra Xtream Platinum (dnsjibre.xyz)',
+          targetCount: 14917,
         }),
       });
       const data = await res.json();
