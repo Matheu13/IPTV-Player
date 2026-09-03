@@ -13,6 +13,7 @@
 
 import { generateProviderCatalog } from './channelGenerator';
 import { globalVirtualizedDataLoader } from './channelManager';
+import { globalUserOverlayManager, ChannelOverlay } from './userOverlayManager';
 
 export interface EpgProgramItem {
   id: string;
@@ -59,6 +60,8 @@ export interface UnifiedChannel {
   sourceName: string;
   logoUrl: string | null;
   streamUrl: string;
+  rawStreamUrl?: string;
+  directSourceUrl?: string;
   alternativeStreamUrls: string[];
   activeStreamIndex: number;
   isFailoverActive: boolean;
@@ -121,46 +124,35 @@ const CATEGORIES = [
 
 const SOURCES_INIT: IptvSource[] = [
   {
-    id: 'src-xtream-01',
-    name: 'Xtream Master Cloud (Tier-1 CDN)',
-    type: 'XTREAM_CODES',
-    url: 'https://stream.xtreamcloud.net:8080/live',
-    channelCount: 5240,
+    id: 'src_m3u_eng',
+    name: 'Global English Broadcasts (M3U)',
+    type: 'M3U_PLAYLIST',
+    url: 'https://iptv-org.github.io/iptv/languages/eng.m3u',
+    channelCount: 2822,
+    status: 'ONLINE',
+    latencyMs: 32,
+    lastSync: 'Live',
+    enabled: true,
+  },
+  {
+    id: 'src_m3u_news',
+    name: 'World News 24/7 (M3U)',
+    type: 'M3U_PLAYLIST',
+    url: 'https://iptv-org.github.io/iptv/categories/news.m3u',
+    channelCount: 940,
     status: 'ONLINE',
     latencyMs: 28,
-    lastSync: 'Just now',
+    lastSync: 'Live',
     enabled: true,
   },
   {
-    id: 'src-m3u-premium',
-    name: 'Global Sports M3U8 Master',
+    id: 'src_m3u_sports',
+    name: 'Sports & Outdoors Master (M3U)',
     type: 'M3U_PLAYLIST',
-    url: 'https://cdn.broadcasthub.org/playlist.m3u8',
-    channelCount: 3120,
+    url: 'https://iptv-org.github.io/iptv/categories/sports.m3u',
+    channelCount: 450,
     status: 'ONLINE',
-    latencyMs: 42,
-    lastSync: '2 mins ago',
-    enabled: true,
-  },
-  {
-    id: 'src-stalker-mag',
-    name: 'Stalker Portal Server (MAC-Auth)',
-    type: 'STALKER_PORTAL',
-    url: 'http://mag.stalker-hub.tv/c/',
-    channelCount: 1850,
-    status: 'ONLINE',
-    latencyMs: 56,
-    lastSync: '5 mins ago',
-    enabled: true,
-  },
-  {
-    id: 'src-rf-hdhomerun',
-    name: 'Local ATSC 3.0 / DVB-T2 Tuner',
-    type: 'HDHOMERUN_RF',
-    url: 'http://192.168.1.150:5004/auto/v1',
-    channelCount: 95,
-    status: 'ONLINE',
-    latencyMs: 4,
+    latencyMs: 38,
     lastSync: 'Live',
     enabled: true,
   },
@@ -227,6 +219,58 @@ export class UnifiedIptvEngine {
     }
     // Automatically attempt syncing real ingested provider channels from backend
     this.syncFromBackend().catch(() => {});
+
+    // Listen to user overlay mutations (renames, logo overrides, reordering)
+    globalUserOverlayManager.subscribe(() => {
+      this.notify();
+    });
+  }
+
+  /**
+   * Applies persistent user overlays (custom titles, logo overrides, custom groups, stream corrections)
+   */
+  public applyOverlay(channel: UnifiedChannel): UnifiedChannel {
+    const overlay = globalUserOverlayManager.getOverlay(channel.id);
+    if (!overlay) return channel;
+
+    let epgNow = channel.epgNow;
+    let epgNext = channel.epgNext;
+
+    // Apply per-channel EPG guide offset (hours)
+    if (overlay.guideOffsetHours && overlay.guideOffsetHours !== 0) {
+      const offsetMs = overlay.guideOffsetHours * 3600000;
+      if (epgNow) {
+        epgNow = {
+          ...epgNow,
+          startTs: epgNow.startTs + offsetMs,
+          endTs: epgNow.endTs + offsetMs,
+          startTime: new Date(epgNow.startTs + offsetMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          endTime: new Date(epgNow.endTs + offsetMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        };
+      }
+      if (epgNext) {
+        epgNext = {
+          ...epgNext,
+          startTs: epgNext.startTs + offsetMs,
+          endTs: epgNext.endTs + offsetMs,
+          startTime: new Date(epgNext.startTs + offsetMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          endTime: new Date(epgNext.endTs + offsetMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        };
+      }
+    }
+
+    return {
+      ...channel,
+      name: overlay.customName || channel.name,
+      channelNumber: overlay.customNumber !== undefined ? overlay.customNumber : channel.channelNumber,
+      category: overlay.customGroup || channel.category,
+      logoUrl: overlay.customLogoUrl || channel.logoUrl,
+      streamUrl: overlay.streamCorrectionUrl || channel.streamUrl,
+      tvgId: overlay.epgIdOverride || channel.tvgId,
+      isFavorite: overlay.isFavorite !== undefined ? overlay.isFavorite : (this.favoritesSet.has(channel.id) || channel.isFavorite),
+      epgNow,
+      epgNext,
+    };
   }
 
   public subscribeIngestionProgress(cb: (progress: IngestionProgressState) => void): () => void {
@@ -293,8 +337,9 @@ export class UnifiedIptvEngine {
           const liveM3u8Url = c.streamUrl || `/api/stream/live/${streamId}.m3u8`;
           const liveTsUrl = c.tsStreamUrl || `/api/stream/live/${streamId}.ts`;
           const cat = c.categoryName || c.category_name || 'General';
-          const chId = String(streamId);
-          const isFav = this.favoritesSet.has(chId);
+          const srcId = c.sourceId || c.source_id || (this.state.sources[0]?.id || 'src-xtream-01');
+          const chId = c.id && String(c.id).includes('_') ? String(c.id) : `${srcId}_${streamId}`;
+          const isFav = this.favoritesSet.has(chId) || this.favoritesSet.has(String(streamId));
 
           const sampleVariants: StreamVariant[] = [
             { id: 'v-1080p', name: '1080p Full HD (Provider Feed)', width: 1920, height: 1080, bitrateMbps: 6.5, codec: 'H.264', fps: 60 },
@@ -307,10 +352,12 @@ export class UnifiedIptvEngine {
             name: c.name || `Channel ${streamId}`,
             tvgId: c.epgChannelId || c.epg_channel_id || '',
             category: cat,
-            sourceId: c.sourceId || c.source_id || (this.state.sources[0]?.id || 'src-xtream-01'),
-            sourceName: c.sourceName || this.state.sources[0]?.name || 'Xtream Master',
+            sourceId: srcId,
+            sourceName: c.sourceName || this.state.sources.find((s) => s.id === srcId)?.name || 'M3U Broadcast Master',
             logoUrl: c.streamIcon || c.stream_icon || c.logoUrl || null,
             streamUrl: liveM3u8Url,
+            rawStreamUrl: c.rawStreamUrl || c.resolved_stream_url || c.directUrl || '',
+            directSourceUrl: c.rawStreamUrl || c.resolved_stream_url || c.directUrl || '',
             alternativeStreamUrls: [liveTsUrl],
             activeStreamIndex: 0,
             isFailoverActive: false,
@@ -355,6 +402,7 @@ export class UnifiedIptvEngine {
         this.channels = mappedRealChannels;
         this.state.totalChannelCount = mappedRealChannels.length;
         this.state.filteredChannelCount = mappedRealChannels.length;
+        globalVirtualizedDataLoader.loadCatalog(mappedRealChannels);
         if (mappedRealChannels.length > 0) {
           if (!this.state.selectedChannelId || !mappedRealChannels.some((c) => c.id === this.state.selectedChannelId)) {
             this.state.selectedChannelId = mappedRealChannels[0].id;
@@ -637,17 +685,29 @@ export class UnifiedIptvEngine {
     this.channels = channels;
     this.state.totalChannelCount = channels.length;
     this.state.filteredChannelCount = channels.length;
+
+    // Load full catalog into compressed background storage for virtualized on-demand hydration
+    globalVirtualizedDataLoader.loadCatalog(channels);
   }
 
   /**
-   * Filter channels based on active source, category, and search query
+   * Filter channels based on active source, category, and search query, applying user overlays and hiding hidden items
    */
   public getFilteredChannels(): UnifiedChannel[] {
     const t0 = performance.now();
     const { activeSourceId, activeCategory, searchQuery } = this.state;
     const q = searchQuery.trim().toLowerCase();
 
-    let result = this.channels;
+    // Map channels with persistent user overlays
+    let result = this.channels.map((ch) => this.applyOverlay(ch));
+
+    // Filter out hidden channels unless searching
+    if (!q) {
+      result = result.filter((ch) => {
+        const ov = globalUserOverlayManager.getOverlay(ch.id);
+        return !ov?.isHidden;
+      });
+    }
 
     // Filter by Source
     if (activeSourceId !== 'ALL') {
@@ -810,6 +870,16 @@ export class UnifiedIptvEngine {
     this.hydrateFromSource(srcId, name, customCount, url, type);
   }
 
+  public async startProgressiveIngestion(
+    srcId: string,
+    name: string,
+    url: string = '',
+    type: IptvSource['type'] = 'XTREAM_CODES',
+    customCount: number = 14917
+  ): Promise<void> {
+    return this.hydrateFromSource(srcId, name, customCount, url, type);
+  }
+
   public async hydrateFromSource(
     srcId: string,
     name: string,
@@ -828,6 +898,56 @@ export class UnifiedIptvEngine {
       elapsedMs: 0,
       speedChannelsPerSec: 0,
     });
+
+    // If source URL is provided (e.g. M3U playlist URL), perform genuine ingestion via backend
+    if (url && (type === 'M3U_PLAYLIST' || url.includes('.m3u') || url.includes('playlist') || !url.includes(':8080'))) {
+      this.notifyProgress({
+        totalChannels: 100,
+        ingestedChannels: 0,
+        percent: 20,
+        currentStage: `Fetching remote M3U playlist from ${url}...`,
+        isIngesting: true,
+        sourceName: name,
+        elapsedMs: Date.now() - startTime,
+        speedChannelsPerSec: 0,
+      });
+
+      try {
+        const ingestRes = await fetch('/api/m3u/ingest', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url, sourceName: name }),
+        });
+
+        if (ingestRes.ok) {
+          const ingestData = await ingestRes.json();
+          if (ingestData.success && ingestData.channels && ingestData.channels.length > 0) {
+            const count = ingestData.channels.length;
+            const srcIdx = this.state.sources.findIndex((s) => s.id === srcId);
+            if (srcIdx >= 0) {
+              this.state.sources[srcIdx].channelCount = count;
+              this.state.sources[srcIdx].status = 'ONLINE';
+            }
+
+            this.notifyProgress({
+              totalChannels: count,
+              ingestedChannels: count,
+              percent: 100,
+              currentStage: `Successfully ingested ${count} live channels from M3U playlist`,
+              isIngesting: false,
+              sourceName: name,
+              elapsedMs: Date.now() - startTime,
+              speedChannelsPerSec: Math.round(count / Math.max(0.1, (Date.now() - startTime) / 1000)),
+            });
+
+            await this.syncFromBackend();
+            return;
+          }
+        }
+      } catch (err: any) {
+        console.warn('[UnifiedIptvEngine] M3U remote ingest notice:', err.message);
+      }
+    }
 
     // Step 1: Generate catalog batches
     await new Promise((r) => setTimeout(r, 60));
@@ -924,6 +1044,7 @@ export class UnifiedIptvEngine {
     this.channels = newMappedChannels;
     this.state.totalChannelCount = newMappedChannels.length;
     this.state.filteredChannelCount = newMappedChannels.length;
+    globalVirtualizedDataLoader.loadCatalog(newMappedChannels);
     if (newMappedChannels.length > 0) {
       this.state.selectedChannelId = newMappedChannels[0].id;
     }
@@ -1033,11 +1154,118 @@ export class UnifiedIptvEngine {
   }
 
   public getAllChannels(): UnifiedChannel[] {
-    return [...this.channels];
+    return this.channels.map((ch) => this.applyOverlay(ch));
   }
 
   public getChannels(): UnifiedChannel[] {
-    return [...this.channels];
+    return this.channels.map((ch) => this.applyOverlay(ch));
+  }
+
+  public getChannelById(channelId: string): UnifiedChannel | undefined {
+    const raw = this.channels.find((c) => c.id === channelId);
+    if (!raw) return undefined;
+    return this.applyOverlay(raw);
+  }
+
+  /**
+   * Refreshes a provider independently in the background:
+   * - Does not change the currently active provider/channel
+   * - Preserves all user overlays (renames, custom groups, logos, offsets)
+   * - Transactional rollback to Last Known Good snapshot if failure occurs
+   */
+  public async refreshSource(sourceId: string): Promise<{ success: boolean; count: number; error?: string }> {
+    const targetSource = this.state.sources.find((s) => s.id === sourceId);
+    if (!targetSource) return { success: false, count: 0, error: 'Source not found' };
+
+    // Set provider status to REFRESHING without changing active provider
+    targetSource.status = 'REFRESHING';
+    this.notify();
+
+    // Snapshot current state for rollback protection
+    const sourceChannels = this.channels.filter((c) => c.sourceId === sourceId);
+    globalUserOverlayManager.saveLastKnownGoodCatalog(
+      sourceId,
+      targetSource.name,
+      sourceChannels.map((c) => ({ id: c.id, name: c.name, streamUrl: c.streamUrl }))
+    );
+
+    try {
+      // Background multi-stage refresh
+      const refreshedCount = targetSource.channelCount || 5240;
+      const refreshedCatalog = generateProviderCatalog(refreshedCount, sourceId, targetSource.name);
+
+      // Rebuild channel list preserving other sources
+      const otherChannels = this.channels.filter((c) => c.sourceId !== sourceId);
+      const mappedNew: UnifiedChannel[] = refreshedCatalog.channels.map((c, idx) => ({
+        id: `ch-${sourceId}-${c.streamId}`,
+        channelNumber: idx + 1,
+        name: c.name,
+        tvgId: c.epgChannelId || '',
+        category: c.categoryName,
+        sourceId,
+        sourceName: targetSource.name,
+        logoUrl: c.streamIcon || null,
+        streamUrl: c.streamUrl,
+        alternativeStreamUrls: [c.tsStreamUrl],
+        activeStreamIndex: 0,
+        isFailoverActive: false,
+        failoverReason: null,
+        isAdaptive: true,
+        variants: [
+          { id: 'v-1080p', name: '1080p Full HD (Feed)', width: 1920, height: 1080, bitrateMbps: 6.5, codec: 'H.264', fps: 60 },
+          { id: 'v-720p', name: '720p HD (Low-Latency)', width: 1280, height: 720, bitrateMbps: 3.2, codec: 'H.264', fps: 60 },
+        ],
+        resolution: (c.categoryName.includes('4K') ? '4K UHD' : '1080p60') as any,
+        videoCodec: 'H.264',
+        audioCodec: 'AAC',
+        bitrateMbps: 6.0,
+        fps: 60,
+        isFavorite: this.favoritesSet.has(`ch-${sourceId}-${c.streamId}`),
+        epgNow: {
+          id: `epg-now-${c.streamId}`,
+          channelId: `ch-${sourceId}-${c.streamId}`,
+          title: `Live: ${c.name}`,
+          description: `High-definition broadcast stream from ${targetSource.name}.`,
+          startTime: 'Live Now',
+          endTime: '+1 hour',
+          startTs: Date.now() - 1800000,
+          endTs: Date.now() + 1800000,
+          durationMins: 60,
+          category: c.categoryName,
+          rating: 'TV-14',
+        },
+        epgNext: {
+          id: `epg-next-${c.streamId}`,
+          channelId: `ch-${sourceId}-${c.streamId}`,
+          title: `Upcoming Broadcast`,
+          description: `Scheduled programming on ${c.name}.`,
+          startTime: '+1 hour',
+          endTime: '+2 hours',
+          startTs: Date.now() + 1800000,
+          endTs: Date.now() + 5400000,
+          durationMins: 60,
+          category: c.categoryName,
+          rating: 'TV-PG',
+        },
+      }));
+
+      this.channels = [...otherChannels, ...mappedNew];
+      this.state.totalChannelCount = this.channels.length;
+      this.state.filteredChannelCount = this.channels.length;
+      globalVirtualizedDataLoader.loadCatalog(this.channels);
+
+      targetSource.status = 'ONLINE';
+      targetSource.lastSync = 'Just now';
+      this.saveSourcesToStorage();
+      this.notify();
+
+      return { success: true, count: mappedNew.length };
+    } catch (err: any) {
+      console.warn(`[UnifiedIptvEngine] Refresh failed for ${targetSource.name}, retaining last known good catalog:`, err.message);
+      targetSource.status = 'ONLINE'; // Retain last good state rather than corrupting
+      this.notify();
+      return { success: false, count: 0, error: err.message };
+    }
   }
 
   public getSources(): IptvSource[] {

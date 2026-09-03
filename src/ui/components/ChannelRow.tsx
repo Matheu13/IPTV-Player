@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { Play, Star, Tv, Radio } from 'lucide-react';
+import React from 'react';
+import { Play, Star, MoreVertical } from 'lucide-react';
 import { SourceBadge } from './SourceBadge';
 import { Focusable } from './Focusable';
+import { ChannelLogo } from './ChannelLogo';
 import { useDesignSystem, DensityMode } from '../context/DesignSystemContext';
 
 export interface ChannelRowData {
@@ -43,6 +44,7 @@ interface ChannelRowProps {
   density?: DensityMode;
   onSelect: (channel: ChannelRowData) => void;
   onToggleFavorite?: (channelId: string) => void;
+  onOpenActionMenu?: (channel: ChannelRowData) => void;
   showEpgProgress?: boolean;
 }
 
@@ -55,11 +57,11 @@ export const ChannelRow: React.FC<ChannelRowProps> = ({
   density: densityProp,
   onSelect,
   onToggleFavorite,
+  onOpenActionMenu,
   showEpgProgress = true,
 }) => {
   const { density: contextDensity } = useDesignSystem();
   const density = densityProp || contextDensity || 'comfortable';
-  const [imgError, setImgError] = useState(false);
 
   const progress = channel.nowProgramme?.progressPercent ?? 42;
 
@@ -67,7 +69,7 @@ export const ChannelRow: React.FC<ChannelRowProps> = ({
   const densityMetrics = {
     compact: {
       container: 'px-2 py-1.5 min-h-[38px] gap-2',
-      logo: 'w-6 h-6 p-0.5 rounded',
+      logoSize: 'xs' as const,
       title: 'text-xs font-semibold',
       nowText: 'text-[11px] truncate',
       showNext: false,
@@ -76,7 +78,7 @@ export const ChannelRow: React.FC<ChannelRowProps> = ({
     },
     comfortable: {
       container: 'px-3 py-2 min-h-[52px] gap-3',
-      logo: 'w-9 h-9 p-1 rounded-md',
+      logoSize: 'sm' as const,
       title: 'text-sm font-bold',
       nowText: 'text-xs truncate',
       showNext: false,
@@ -85,7 +87,7 @@ export const ChannelRow: React.FC<ChannelRowProps> = ({
     },
     spacious: {
       container: 'px-3.5 py-2.5 min-h-[68px] gap-3.5',
-      logo: 'w-12 h-12 p-1.5 rounded-lg',
+      logoSize: 'md' as const,
       title: 'text-base font-bold',
       nowText: 'text-xs truncate font-medium',
       showNext: true,
@@ -100,6 +102,12 @@ export const ChannelRow: React.FC<ChannelRowProps> = ({
       isFocused={isFocused}
       disabled={disabled}
       onSelect={() => !disabled && onSelect(channel)}
+      onContextMenu={(e: React.MouseEvent) => {
+        e.preventDefault();
+        if (onOpenActionMenu) {
+          onOpenActionMenu(channel);
+        }
+      }}
       className={`group relative flex items-center rounded-lg border transition-all duration-150 select-none ${
         densityMetrics.container
       } ${
@@ -120,21 +128,14 @@ export const ChannelRow: React.FC<ChannelRowProps> = ({
         {channel.channelNumber ?? '—'}
       </div>
 
-      {/* Channel Logo */}
-      <div className={`${densityMetrics.logo} shrink-0 bg-slate-900/90 border border-slate-800 flex items-center justify-center overflow-hidden`}>
-        {channel.logo && !imgError ? (
-          <img
-            src={channel.logo}
-            alt={channel.name}
-            onError={() => setImgError(true)}
-            className="w-full h-full object-contain"
-            loading="lazy"
-            referrerPolicy="no-referrer"
-          />
-        ) : (
-          <Tv className="w-4 h-4 text-slate-500" />
-        )}
-      </div>
+      {/* Consistent Channel Logo */}
+      <ChannelLogo
+        name={channel.name}
+        logoUrl={channel.logo}
+        category={channel.category}
+        size={densityMetrics.logoSize}
+        showBadgeBorder={true}
+      />
 
       {/* Main Channel & EPG Information */}
       <div className="flex-1 min-w-0 flex flex-col justify-center gap-0.5">
@@ -212,9 +213,23 @@ export const ChannelRow: React.FC<ChannelRowProps> = ({
         )}
       </div>
 
-      {/* Action Buttons: Favorite & Play */}
+      {/* Action Buttons: Context Menu, Favorite & Play */}
       {!disabled && (
         <div className="flex items-center gap-1 shrink-0 ml-1">
+          {onOpenActionMenu && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenActionMenu(channel);
+              }}
+              className="p-1.5 rounded hover:bg-slate-800/80 text-slate-400 hover:text-white transition-colors"
+              title="Channel Options & Actions"
+            >
+              <MoreVertical className="w-3.5 h-3.5" />
+            </button>
+          )}
+
           {onToggleFavorite && (
             <button
               type="button"

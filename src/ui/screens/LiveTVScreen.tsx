@@ -47,7 +47,9 @@ export const LiveTVScreen: React.FC<LiveTVScreenProps> = ({
   const [categories, setCategories] = useState<string[]>([]);
   const [sources, setSources] = useState<any[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
-  const [selectedSourceId, setSelectedSourceId] = useState<string>('all');
+  const [selectedSourceId, setSelectedSourceId] = useState<string>(
+    globalUnifiedIptvEngine.getState().activeSourceId || 'all'
+  );
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeChannel, setActiveChannel] = useState<ChannelRowData | null>(null);
   const [isLoadingChannels, setIsLoadingChannels] = useState<boolean>(false);
@@ -55,11 +57,39 @@ export const LiveTVScreen: React.FC<LiveTVScreenProps> = ({
   const [showOnlyFavorites, setShowOnlyFavorites] = useState<boolean>(false);
   const [page, setPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(100);
+  const [providerToast, setProviderToast] = useState<string | null>(null);
   const [ingestionProgress, setIngestionProgress] = useState<IngestionProgressState>(
     globalUnifiedIptvEngine.getIngestionProgress()
   );
 
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Keep selectedSourceId in sync with global unified IPTV engine state
+  useEffect(() => {
+    const handleEngineChange = () => {
+      const activeId = globalUnifiedIptvEngine.getState().activeSourceId;
+      setSelectedSourceId(activeId === 'ALL' ? 'all' : activeId);
+    };
+
+    handleEngineChange();
+    const unsub = globalUnifiedIptvEngine.subscribe(handleEngineChange);
+    return () => unsub();
+  }, []);
+
+  const handleSwitchProvider = (sourceId: string, sourceName: string) => {
+    const targetId = sourceId === 'all' ? 'ALL' : sourceId;
+    globalUnifiedIptvEngine.setActiveSource(targetId);
+    setSelectedSourceId(sourceId);
+
+    // Auto-tune to first channel of the newly selected provider if current channel isn't in it
+    const available = channels.filter((c) => targetId === 'ALL' || c.sourceId === targetId);
+    if (available.length > 0 && (!playbackState.currentChannel || playbackState.currentChannel.sourceId !== targetId)) {
+      playChannel(available[0], 'embedded');
+    }
+
+    setProviderToast(`Switched provider: ${sourceName}`);
+    setTimeout(() => setProviderToast(null), 3000);
+  };
 
   // Subscribe to ingestion progress
   useEffect(() => {
@@ -217,6 +247,17 @@ export const LiveTVScreen: React.FC<LiveTVScreenProps> = ({
         </div>
       )}
 
+      {/* Provider Switch Feedback Notification */}
+      {providerToast && (
+        <div className="bg-emerald-950/90 border-b border-emerald-500/40 px-4 py-2 flex items-center justify-between text-xs text-emerald-300 animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-2 font-medium">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <span>{providerToast}</span>
+          </div>
+          <span className="text-[10px] font-mono text-emerald-400/80">Press 'P' to cycle providers</span>
+        </div>
+      )}
+
       {/* Top Bar Filter & Stats */}
       <div className="px-4 py-2.5 bg-[#0c1018] border-b border-white/5 flex flex-wrap items-center justify-between gap-3 shrink-0">
         <div className="flex items-center gap-3">
@@ -277,7 +318,7 @@ export const LiveTVScreen: React.FC<LiveTVScreenProps> = ({
             </div>
             <div className="space-y-1">
               <button
-                onClick={() => setSelectedSourceId('all')}
+                onClick={() => handleSwitchProvider('all', 'All Providers')}
                 className={`w-full text-left px-2.5 py-1.5 rounded text-xs font-medium transition-colors flex items-center justify-between ${
                   selectedSourceId === 'all'
                     ? 'bg-sky-500/20 text-sky-300 font-semibold'
@@ -290,7 +331,7 @@ export const LiveTVScreen: React.FC<LiveTVScreenProps> = ({
               {sources.map((src) => (
                 <button
                   key={src.id}
-                  onClick={() => setSelectedSourceId(src.id)}
+                  onClick={() => handleSwitchProvider(src.id, src.name)}
                   className={`w-full text-left px-2.5 py-1.5 rounded text-xs font-medium transition-colors flex items-center justify-between ${
                     selectedSourceId === src.id
                       ? 'bg-sky-500/20 text-sky-300 font-semibold'
@@ -351,9 +392,9 @@ export const LiveTVScreen: React.FC<LiveTVScreenProps> = ({
           ) : (
             <>
               <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                {currentWindowSlice.map((ch) => (
+                {currentWindowSlice.map((ch, idx) => (
                   <ChannelRow
-                    key={ch.id}
+                    key={`live-row-${ch.id || `${ch.channelNumber}-${idx}`}`}
                     channel={ch}
                     isActive={activeChannel?.id === ch.id}
                     onSelect={handleSelectChannel}

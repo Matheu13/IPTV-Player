@@ -18,6 +18,8 @@ import { GlassPanel } from '../components/GlassPanel';
 import { Focusable } from '../components/Focusable';
 import { SourceBadge } from '../components/SourceBadge';
 import { ChannelRowData } from '../components/ChannelRow';
+import { ProviderSwitcher } from '../components/ProviderSwitcher';
+import { ChannelLogo } from '../components/ChannelLogo';
 import { globalUnifiedIptvEngine } from '../../lib/unifiedIptvEngine';
 
 interface HomeScreenProps {
@@ -41,8 +43,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   useEffect(() => {
     const updateData = () => {
       try {
+        const activeSourceId = globalUnifiedIptvEngine.getState().activeSourceId;
         const allChannels = globalUnifiedIptvEngine.getAllChannels();
-        const all: ChannelRowData[] = allChannels.map((c: any, i) => ({
+        const filtered = activeSourceId === 'ALL' || activeSourceId === 'all'
+          ? allChannels
+          : allChannels.filter((c: any) => c.sourceId === activeSourceId);
+
+        const all: ChannelRowData[] = filtered.map((c: any, i) => ({
           id: c.id,
           channelNumber: c.channelNumber || i + 1,
           name: c.name,
@@ -87,7 +94,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       stop: '20:30',
       progressPercent: 65,
     },
-    streamUrl: '',
+    streamUrl: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
     is4k: true,
   };
 
@@ -100,7 +107,18 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   ];
 
   return (
-    <div className="flex-1 bg-[#080b11] text-slate-100 overflow-y-auto p-4 md:p-6 lg:p-8 space-y-8">
+    <div className="flex-1 bg-[#080b11] text-slate-100 overflow-y-auto p-4 md:p-6 lg:p-8 space-y-6">
+      {/* Provider Quick Switcher Strip */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#0d121c] p-3 rounded-2xl border border-white/5">
+        <div className="flex items-center gap-2">
+          <Server className="w-4 h-4 text-sky-400" />
+          <span className="text-xs font-extrabold uppercase tracking-wider text-slate-300">
+            Active IPTV Provider
+          </span>
+        </div>
+        <ProviderSwitcher variant="tabs" />
+      </div>
+
       {/* Hero Spotlight Banner (Cinematic Command OS) */}
       <div className="relative rounded-2xl overflow-hidden border border-white/10 bg-gradient-to-r from-sky-950/80 via-[#111722] to-[#0c1018] shadow-2xl p-6 md:p-10 flex flex-col justify-between min-h-[260px]">
         {/* Subtle background glow */}
@@ -193,15 +211,21 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {recentChannels.map((ch) => (
+          {recentChannels.map((ch, idx) => (
             <Focusable
-              key={ch.id}
-              id={`home-recent-${ch.id}`}
+              key={`home-recent-${ch.id}-${idx}`}
+              id={`home-recent-${ch.id}-${idx}`}
               onSelect={() => onSelectChannel(ch)}
-              className="p-3.5 rounded-xl bg-[#111722]/80 hover:bg-[#161e2c] border border-white/5 hover:border-sky-500/40 transition-all flex items-center gap-3 group"
+              className="p-3.5 rounded-xl bg-[#111722]/80 hover:bg-[#161e2c] border border-white/5 hover:border-sky-500/40 transition-all flex items-center gap-3 group cursor-pointer"
             >
-              <div className="w-10 h-10 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center p-1 shrink-0 group-hover:border-sky-500/50">
-                <Tv className="w-5 h-5 text-sky-400" />
+              <div className="w-10 h-10 rounded-lg bg-slate-900 flex items-center justify-center shrink-0">
+                <ChannelLogo
+                  name={ch.name}
+                  logoUrl={ch.logo}
+                  category={ch.category}
+                  size="md"
+                  showBadgeBorder={true}
+                />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="font-bold text-sm text-white truncate group-hover:text-sky-300">

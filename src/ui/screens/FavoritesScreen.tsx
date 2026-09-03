@@ -14,9 +14,12 @@ import {
   Search,
   SlidersHorizontal,
   Clock,
+  MoreVertical,
 } from 'lucide-react';
 import { usePlayback } from '../context/PlaybackContext';
 import { globalUnifiedIptvEngine, UnifiedChannel } from '../../lib/unifiedIptvEngine';
+import { ChannelLogo } from '../components/ChannelLogo';
+import { ChannelActionModal } from '../components/ChannelActionModal';
 
 type FavoriteFilter = 'all' | 'live' | 'movies' | 'series';
 
@@ -25,7 +28,8 @@ interface SavedItem {
   type: 'live' | 'movie' | 'series';
   title: string;
   category: string;
-  image: string;
+  image?: string;
+  logoUrl?: string;
   streamUrl: string;
   rating?: string;
   duration?: string;
@@ -38,29 +42,11 @@ export const FavoritesScreen: React.FC = () => {
   const [activeFilter, setActiveFilter] = useState<FavoriteFilter>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedTag, setSelectedTag] = useState<string>('All');
-  const [favorites, setFavorites] = useState<SavedItem[]>([
+  const [channelActionTarget, setChannelActionTarget] = useState<UnifiedChannel | null>(null);
+  const [liveFavorites, setLiveFavorites] = useState<UnifiedChannel[]>([]);
+  const [vodFavorites, setVodFavorites] = useState<SavedItem[]>([
     {
-      id: 'fav-1',
-      type: 'live',
-      title: 'US: ESPN Ultra HD',
-      category: 'Sports & Football',
-      image: 'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=400',
-      streamUrl: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
-      badge: '4K LIVE',
-      tags: ['Sports', 'Football', 'Game Day'],
-    },
-    {
-      id: 'fav-2',
-      type: 'live',
-      title: 'UK: BBC One London HD',
-      category: 'UK | ENTERTAINMENT',
-      image: 'https://images.unsplash.com/photo-1594909122845-11baa439b7bf?w=400',
-      streamUrl: 'https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8',
-      badge: '1080P',
-      tags: ['UK', 'News', 'Daily'],
-    },
-    {
-      id: 'fav-3',
+      id: 'fav-vod-1',
       type: 'movie',
       title: 'Dune: Part Two (4K HDR)',
       category: 'Sci-Fi Master',
@@ -72,7 +58,7 @@ export const FavoritesScreen: React.FC = () => {
       tags: ['Sci-Fi', 'Movies', 'Weekend'],
     },
     {
-      id: 'fav-4',
+      id: 'fav-vod-2',
       type: 'series',
       title: 'Shōgun: Complete Season 1',
       category: 'Historical Epic',
@@ -84,7 +70,7 @@ export const FavoritesScreen: React.FC = () => {
       tags: ['Drama', 'Series', 'Epic'],
     },
     {
-      id: 'fav-5',
+      id: 'fav-vod-3',
       type: 'movie',
       title: 'Blade Runner 2049 (Atmos)',
       category: 'Sci-Fi Master',
@@ -97,14 +83,41 @@ export const FavoritesScreen: React.FC = () => {
     },
   ]);
 
+  // Sync live favorites from unified engine
+  useEffect(() => {
+    const update = () => {
+      const all = globalUnifiedIptvEngine.getAllChannels();
+      const favChannels = all.filter((c) => globalUnifiedIptvEngine.isFavorite(c.id) || c.isFavorite);
+      setLiveFavorites(favChannels);
+    };
+    update();
+    const unsub = globalUnifiedIptvEngine.subscribe(update);
+    return () => unsub();
+  }, []);
+
+  // Combined list
+  const combinedItems: SavedItem[] = useMemo(() => {
+    const liveItems: SavedItem[] = liveFavorites.map((ch) => ({
+      id: ch.id,
+      type: 'live',
+      title: ch.name,
+      category: ch.category,
+      logoUrl: ch.logoUrl || undefined,
+      streamUrl: ch.streamUrl,
+      badge: ch.resolution || '1080p',
+      tags: [ch.category, ch.sourceName, 'Live TV'],
+    }));
+    return [...liveItems, ...vodFavorites];
+  }, [liveFavorites, vodFavorites]);
+
   const allTags = useMemo(() => {
     const set = new Set<string>(['All']);
-    favorites.forEach((f) => f.tags.forEach((t) => set.add(t)));
+    combinedItems.forEach((f) => f.tags.forEach((t) => set.add(t)));
     return Array.from(set);
-  }, [favorites]);
+  }, [combinedItems]);
 
   const filteredFavorites = useMemo(() => {
-    return favorites.filter((item) => {
+    return combinedItems.filter((item) => {
       const matchType = activeFilter === 'all' || item.type === activeFilter;
       const matchTag = selectedTag === 'All' || item.tags.includes(selectedTag);
       const matchSearch =
@@ -114,7 +127,7 @@ export const FavoritesScreen: React.FC = () => {
 
       return matchType && matchTag && matchSearch;
     });
-  }, [favorites, activeFilter, selectedTag, searchQuery]);
+  }, [combinedItems, activeFilter, selectedTag, searchQuery]);
 
   const handlePlay = (item: SavedItem) => {
     playChannel(
@@ -139,12 +152,12 @@ export const FavoritesScreen: React.FC = () => {
 
   const handleRemove = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setFavorites((prev) => prev.filter((item) => item.id !== id));
+    setVodFavorites((prev) => prev.filter((item) => item.id !== id));
   };
 
   const handleExportM3u = () => {
     let m3u = '#EXTM3U\n';
-    favorites.forEach((item) => {
+    combinedItems.forEach((item) => {
       m3u += `#EXTINF:-1 tvg-name="${item.title}" group-title="${item.category}",${item.title}\n${item.streamUrl}\n`;
     });
     const blob = new Blob([m3u], { type: 'audio/x-mpegurl' });
@@ -168,7 +181,7 @@ export const FavoritesScreen: React.FC = () => {
             <h1 className="text-xl font-bold text-white flex items-center gap-2">
               <span>Favorites &amp; Watchlist Vault</span>
               <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-xs font-mono font-bold">
-                {favorites.length} Items
+                {combinedItems.length} Items
               </span>
             </h1>
             <p className="text-xs text-slate-400">
@@ -275,63 +288,145 @@ export const FavoritesScreen: React.FC = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-            {filteredFavorites.map((item) => (
-              <div
-                key={item.id}
-                onClick={() => handlePlay(item)}
-                className="group relative bg-[#111722] rounded-xl overflow-hidden border border-slate-800/80 hover:border-sky-500/60 shadow-lg transition-all duration-300 transform hover:-translate-y-1 cursor-pointer flex flex-col"
-              >
-                <div className="relative aspect-video w-full overflow-hidden bg-slate-900">
-                  <img
-                    src={item.image}
-                    alt={item.title}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex flex-col justify-between p-3">
-                    <div className="flex justify-between items-center">
-                      <span className="px-2 py-0.5 rounded bg-black/80 backdrop-blur-md text-[10px] font-mono text-amber-300 font-bold border border-white/10">
-                        {item.badge}
-                      </span>
-                      <button
-                        onClick={(e) => handleRemove(item.id, e)}
-                        className="p-1.5 rounded-full bg-black/60 hover:bg-rose-600 text-slate-300 hover:text-white transition"
-                        title="Remove from favorites"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+            {filteredFavorites.map((item, idx) => {
+              const isLive = item.type === 'live';
+              const liveChan = isLive ? liveFavorites.find((c) => c.id === item.id) : null;
 
-                    <div className="w-10 h-10 rounded-full bg-sky-500 text-white flex items-center justify-center self-center shadow-lg shadow-sky-500/40 transform scale-90 group-hover:scale-100 transition-all">
-                      <Play className="w-5 h-5 fill-white ml-0.5" />
-                    </div>
+              return (
+                <div
+                  key={`fav-card-${item.type}-${item.id}-${idx}`}
+                  onClick={() => handlePlay(item)}
+                  onContextMenu={(e) => {
+                    if (liveChan) {
+                      e.preventDefault();
+                      setChannelActionTarget(liveChan);
+                    }
+                  }}
+                  className="group relative bg-[#111722] rounded-xl overflow-hidden border border-slate-800/80 hover:border-sky-500/60 shadow-lg transition-all duration-300 transform hover:-translate-y-1 cursor-pointer flex flex-col"
+                >
+                  <div className="relative aspect-video w-full overflow-hidden bg-slate-900 flex items-center justify-center p-4">
+                    {isLive ? (
+                      <div className="w-full h-full flex items-center justify-center bg-slate-950/60 rounded-lg p-2">
+                        <ChannelLogo
+                          name={item.title}
+                          logoUrl={item.logoUrl}
+                          category={item.category}
+                          size="lg"
+                          showBadgeBorder={true}
+                        />
+                      </div>
+                    ) : (
+                      <img
+                        src={item.image}
+                        alt={item.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      />
+                    )}
 
-                    <div className="flex items-center justify-between text-[11px] text-slate-300 font-mono">
-                      <span>{item.category}</span>
-                      {item.duration && <span>{item.duration}</span>}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex flex-col justify-between p-3">
+                      <div className="flex justify-between items-center">
+                        <span className="px-2 py-0.5 rounded bg-black/80 backdrop-blur-md text-[10px] font-mono text-amber-300 font-bold border border-white/10">
+                          {item.badge}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          {liveChan && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setChannelActionTarget(liveChan);
+                              }}
+                              className="p-1.5 rounded-full bg-black/60 hover:bg-slate-700 text-slate-300 hover:text-white transition"
+                              title="Options"
+                            >
+                              <MoreVertical className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          <button
+                            onClick={(e) => {
+                              if (isLive) {
+                                e.stopPropagation();
+                                globalUnifiedIptvEngine.toggleFavorite(item.id);
+                              } else {
+                                handleRemove(item.id, e);
+                              }
+                            }}
+                            className="p-1.5 rounded-full bg-black/60 hover:bg-rose-600 text-slate-300 hover:text-white transition"
+                            title="Remove from favorites"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="w-10 h-10 rounded-full bg-sky-500 text-white flex items-center justify-center self-center shadow-lg shadow-sky-500/40 transform scale-90 group-hover:scale-100 transition-all">
+                        <Play className="w-5 h-5 fill-white ml-0.5" />
+                      </div>
+
+                      <div className="flex items-center justify-between text-[11px] text-slate-300 font-mono">
+                        <span>{item.category}</span>
+                        {item.duration && <span>{item.duration}</span>}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 flex flex-col justify-between space-y-2">
+                    <h3 className="text-xs font-bold text-white group-hover:text-sky-300 transition-colors line-clamp-1">
+                      {item.title}
+                    </h3>
+                    <div className="flex flex-wrap gap-1">
+                      {item.tags.map((t) => (
+                        <span
+                          key={t}
+                          className="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] text-slate-400 font-mono"
+                        >
+                          #{t}
+                        </span>
+                      ))}
                     </div>
                   </div>
                 </div>
-
-                <div className="p-3.5 flex flex-col justify-between space-y-2">
-                  <h3 className="text-xs font-bold text-white group-hover:text-sky-300 transition-colors line-clamp-1">
-                    {item.title}
-                  </h3>
-                  <div className="flex flex-wrap gap-1">
-                    {item.tags.map((t) => (
-                      <span
-                        key={t}
-                        className="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] text-slate-400 font-mono"
-                      >
-                        #{t}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
+
+      {/* Channel Interaction Modal */}
+      <ChannelActionModal
+        channel={channelActionTarget}
+        isOpen={Boolean(channelActionTarget)}
+        onClose={() => setChannelActionTarget(null)}
+        onPlayFullscreen={() => {
+          if (channelActionTarget) {
+            playChannel({
+              id: channelActionTarget.id,
+              channelNumber: channelActionTarget.channelNumber,
+              name: channelActionTarget.name,
+              category: channelActionTarget.category,
+              sourceName: channelActionTarget.sourceName,
+              sourceId: channelActionTarget.sourceId,
+              streamUrl: channelActionTarget.streamUrl,
+              is4k: channelActionTarget.resolution?.includes('4K'),
+            }, 'fullscreen');
+            setChannelActionTarget(null);
+          }
+        }}
+        onPlayPreview={() => {
+          if (channelActionTarget) {
+            playChannel({
+              id: channelActionTarget.id,
+              channelNumber: channelActionTarget.channelNumber,
+              name: channelActionTarget.name,
+              category: channelActionTarget.category,
+              sourceName: channelActionTarget.sourceName,
+              sourceId: channelActionTarget.sourceId,
+              streamUrl: channelActionTarget.streamUrl,
+              is4k: channelActionTarget.resolution?.includes('4K'),
+            }, 'embedded');
+            setChannelActionTarget(null);
+          }
+        }}
+      />
     </div>
   );
 };

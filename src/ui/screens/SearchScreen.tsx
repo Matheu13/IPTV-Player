@@ -341,9 +341,9 @@ export const SearchScreen: React.FC = () => {
               </div>
             ) : (
               <div className="space-y-2.5">
-                {searchResults.map((item) => (
+                {searchResults.map((item, idx) => (
                   <div
-                    key={item.id}
+                    key={`search-res-${item.type}-${item.id}-${idx}`}
                     onClick={() => handlePlayResult(item)}
                     className="group bg-[#111722] border border-slate-800/80 hover:border-sky-500/60 rounded-xl p-3 flex items-center justify-between gap-4 transition-all hover:bg-slate-800/40 cursor-pointer"
                   >

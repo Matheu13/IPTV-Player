@@ -30,14 +30,6 @@ interface VideoPlayerShellProps {
   onClose?: () => void;
 }
 
-const FALLBACK_STREAMS = [
-  'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
-  'https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8',
-  'https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
-];
-
 export const VideoPlayerShell: React.FC<VideoPlayerShellProps> = ({
   id = 'unified-video-player',
   forceMode,
@@ -56,7 +48,7 @@ export const VideoPlayerShell: React.FC<VideoPlayerShellProps> = ({
   const [isHovered, setIsHovered] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
   const [streamError, setStreamError] = useState<string | null>(null);
-  const [fallbackIndex, setFallbackIndex] = useState<number>(0);
+  const [retryCounter, setRetryCounter] = useState<number>(0);
   const [statsOverlay, setStatsOverlay] = useState<boolean>(false);
   const [isAutoplayMuted, setIsAutoplayMuted] = useState<boolean>(false);
   const [videoDimensions, setVideoDimensions] = useState<{ width: number; height: number }>({
@@ -153,30 +145,37 @@ export const VideoPlayerShell: React.FC<VideoPlayerShellProps> = ({
     };
   }, []);
 
+  // Reset retry counter and errors whenever switching channels
+  useEffect(() => {
+    setRetryCounter(0);
+    setStreamError(null);
+  }, [currentChannel?.id]);
+
   // Determine current active stream URL
   const getPlayableStreamUrl = useCallback(() => {
     if (!currentChannel) return '';
-    let raw = currentChannel.streamUrl;
-    if (!raw || streamError) {
-      raw = FALLBACK_STREAMS[fallbackIndex % FALLBACK_STREAMS.length];
-    }
-    // If it's a non-CORS external HTTP stream, route via proxy
-    if (raw.startsWith('http://') && !raw.includes('localhost') && !raw.includes('127.0.0.1')) {
+    // Use the actual live stream URL provided by the M3U playlist
+    const raw = (currentChannel as any).rawStreamUrl || (currentChannel as any).directUrl || currentChannel.streamUrl;
+    if (!raw) return '';
+
+    // If it's an external HTTP or HTTPS stream, route via local proxy to resolve CORS & mixed-content
+    if (raw.startsWith('http://') || (raw.startsWith('https://') && !raw.includes(window.location.host) && !raw.startsWith('/api/stream/'))) {
       return `/api/stream/proxy?url=${encodeURIComponent(raw)}`;
     }
     return raw;
-  }, [currentChannel, streamError, fallbackIndex]);
+  }, [currentChannel]);
 
   // Play video with audio fallback handling
   const safePlayVideo = useCallback((video: HTMLVideoElement) => {
-    video.muted = state.isMuted;
+    if (!video) return;
+    video.muted = state.isMuted || isAutoplayMuted;
     video.volume = state.isMuted ? 0 : Math.max(0.1, (state.volume || 90) / 100);
 
     const playPromise = video.play();
     if (playPromise !== undefined) {
       playPromise
         .then(() => {
-          setIsAutoplayMuted(false);
+          // Playback started successfully
         })
         .catch((err) => {
           console.warn('[VideoPlayerShell] Unmuted autoplay restricted by browser policy. Falling back to muted playback:', err.message);
@@ -186,7 +185,7 @@ export const VideoPlayerShell: React.FC<VideoPlayerShellProps> = ({
           video.play().catch((e2) => console.warn('[VideoPlayerShell] Secondary play attempt failed:', e2));
         });
     }
-  }, [state.isMuted, state.volume]);
+  }, [state.isMuted, state.volume, isAutoplayMuted]);
 
   // Attach and load Video / HLS
   useEffect(() => {
@@ -204,19 +203,21 @@ export const VideoPlayerShell: React.FC<VideoPlayerShellProps> = ({
 
     setStreamError(null);
 
-    const isHls = streamUrl.includes('.m3u8') || streamUrl.includes('hls');
+    const isHls = streamUrl.includes('.m3u8') || streamUrl.includes('hls') || streamUrl.includes('/api/stream/');
 
     if (isHls && Hls.isSupported()) {
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: true,
         backBufferLength: 60,
-        manifestLoadingTimeOut: 10000,
-        manifestLoadingMaxRetry: 3,
-        levelLoadingTimeOut: 10000,
-        fragLoadingTimeOut: 12000,
-        fragLoadingMaxRetry: 3,
+        manifestLoadingTimeOut: 6000,
+        manifestLoadingMaxRetry: 2,
+        levelLoadingTimeOut: 6000,
+        fragLoadingTimeOut: 8000,
+        fragLoadingMaxRetry: 2,
       });
+
+      let netErrorCount = 0;
 
       hls.loadSource(streamUrl);
       hls.attachMedia(video);
@@ -231,18 +232,26 @@ export const VideoPlayerShell: React.FC<VideoPlayerShellProps> = ({
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-              console.warn('[VideoPlayerShell] HLS Fatal Network Error, trying recovery...');
-              hls.startLoad();
+              netErrorCount++;
+              if (netErrorCount <= 2) {
+                console.warn(`[VideoPlayerShell] HLS Network Error retry ${netErrorCount}/2...`);
+                hls.startLoad();
+              } else {
+                console.warn('[VideoPlayerShell] Live channel stream unreachable:', streamUrl);
+                hls.destroy();
+                hlsRef.current = null;
+                setStreamError(`Channel stream unreachable (${data.details || 'Network Error'}). The upstream feed may be offline.`);
+              }
               break;
             case Hls.ErrorTypes.MEDIA_ERROR:
-              console.warn('[VideoPlayerShell] HLS Fatal Media Error, recovering...');
+              console.warn('[VideoPlayerShell] HLS Fatal Media Error, attempting recovery...');
               hls.recoverMediaError();
               break;
             default:
               console.error('[VideoPlayerShell] Fatal HLS Error:', data);
               hls.destroy();
               hlsRef.current = null;
-              setStreamError('Stream source encountered a transmission error. Switching to fallback mirror.');
+              setStreamError(`Stream playback error: ${data.details || 'Upstream Error'}`);
               break;
           }
         }
@@ -269,25 +278,33 @@ export const VideoPlayerShell: React.FC<VideoPlayerShellProps> = ({
       }
     };
 
+    const handleCanPlay = () => {
+      if (state.isPlaying && video.paused) {
+        safePlayVideo(video);
+      }
+    };
+
     const handleError = () => {
-      console.warn('[VideoPlayerShell] Video element error on stream:', streamUrl);
-      if (!streamError) {
-        setFallbackIndex((prev) => prev + 1);
+      if (video.error) {
+        console.warn('[VideoPlayerShell] Video element error on stream:', streamUrl, video.error);
+        setStreamError(`Playback error (Code ${video.error.code}): Channel stream temporarily unavailable.`);
       }
     };
 
     video.addEventListener('loadedmetadata', handleLoadedMetadata);
+    video.addEventListener('canplay', handleCanPlay);
     video.addEventListener('error', handleError);
 
     return () => {
       video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      video.removeEventListener('canplay', handleCanPlay);
       video.removeEventListener('error', handleError);
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
       }
     };
-  }, [currentChannel?.id, currentChannel?.streamUrl, fallbackIndex, safePlayVideo]);
+  }, [currentChannel?.id, currentChannel?.streamUrl, retryCounter, safePlayVideo, getPlayableStreamUrl, state.isPlaying]);
 
   // Sync play/pause state with video element
   useEffect(() => {
@@ -333,7 +350,7 @@ export const VideoPlayerShell: React.FC<VideoPlayerShellProps> = ({
 
   const handleRetryStream = () => {
     setStreamError(null);
-    setFallbackIndex((prev) => prev + 1);
+    setRetryCounter((prev) => prev + 1);
   };
 
   // 1. Mini-Player mode: Floating docked window in bottom right
@@ -471,7 +488,7 @@ export const VideoPlayerShell: React.FC<VideoPlayerShellProps> = ({
                   className="px-4 py-2 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold rounded-lg text-sm flex items-center gap-2"
                 >
                   <RotateCcw className="w-4 h-4" />
-                  <span>Switch to Mirror Stream</span>
+                  <span>Retry Channel Stream</span>
                 </button>
                 <button
                   onClick={() => setPresentationMode('embedded')}

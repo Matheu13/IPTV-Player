@@ -89,7 +89,7 @@ export class VirtualizedDataLoader {
   /**
    * Compresses full or partial channel records into the lightweight catalog
    */
-  public loadCatalog(channels: (UnifiedChannel | CompressedChannelRecord)[]): void {
+  public loadCatalog(channels: any[]): void {
     this.compressedCatalog = new Array(channels.length);
     this.catalogMap.clear();
 
@@ -523,7 +523,7 @@ export class ChannelManager {
     return globalVirtualizedDataLoader;
   }
 
-  public static loadCatalog(channels: (UnifiedChannel | CompressedChannelRecord)[]): void {
+  public static loadCatalog(channels: any[]): void {
     globalVirtualizedDataLoader.loadCatalog(channels);
   }
 

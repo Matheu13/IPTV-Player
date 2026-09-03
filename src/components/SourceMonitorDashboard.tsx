@@ -39,6 +39,7 @@ import {
 import { globalUnifiedIptvEngine } from '../lib/unifiedIptvEngine';
 import { multiSourceOrchestrator } from '../lib/multiSourceOrchestrator';
 import { Phase48SourceValidation } from './Phase48SourceValidation';
+import { HydrationProgressIndicator } from './HydrationProgressIndicator';
 
 export const SourceMonitorDashboard: React.FC = () => {
   const [sources, setSources] = useState<RegisteredSourceRecord[]>([]);
@@ -519,6 +520,9 @@ export const SourceMonitorDashboard: React.FC = () => {
           </span>
         </div>
       </div>
+
+      {/* Background Hydration & Progressive Ingestion Progress Indicator */}
+      <HydrationProgressIndicator />
 
       {/* Section 38 Architecture Note Callout */}
       <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex items-start gap-3 text-xs text-slate-300">

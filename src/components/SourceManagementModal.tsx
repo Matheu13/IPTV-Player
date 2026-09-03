@@ -26,12 +26,18 @@ export const SourceManagementModal: React.FC<SourceManagementModalProps> = ({
   onClose,
 }) => {
   const [sources, setSources] = useState<IptvSource[]>(globalUnifiedIptvEngine.getState().sources);
+  const [activeSourceId, setActiveSourceId] = useState<string>(globalUnifiedIptvEngine.getState().activeSourceId);
   const [newName, setNewName] = useState('');
   const [newUrl, setNewUrl] = useState('');
   const [newType, setNewType] = useState<IptvSource['type']>('XTREAM_CODES');
   const [isRefreshing, setIsRefreshing] = useState<string | null>(null);
 
   if (!isOpen) return null;
+
+  const handleSwitchProvider = (id: string) => {
+    globalUnifiedIptvEngine.setActiveSource(id);
+    setActiveSourceId(id);
+  };
 
   const handleAddSource = (e: React.FormEvent) => {
     e.preventDefault();
@@ -180,6 +186,17 @@ export const SourceManagementModal: React.FC<SourceManagementModalProps> = ({
 
                   <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
                     <button
+                      id={`switch-src-${src.id}`}
+                      onClick={() => handleSwitchProvider(src.id)}
+                      className={`px-3 py-1 text-xs font-semibold rounded-lg border transition ${
+                        activeSourceId === src.id
+                          ? 'bg-sky-500 text-white border-sky-400 font-bold shadow-sm'
+                          : 'bg-slate-900 text-slate-300 hover:text-white hover:bg-slate-800 border-slate-700'
+                      }`}
+                    >
+                      {activeSourceId === src.id ? 'Active Provider' : 'Switch To'}
+                    </button>
+                    <button
                       id={`refresh-src-${src.id}`}
                       onClick={() => handleRefreshSource(src.id)}
                       disabled={isRefreshing === src.id}
@@ -267,6 +284,59 @@ export const SourceManagementModal: React.FC<SourceManagementModalProps> = ({
                 </button>
               </div>
             </form>
+
+            {/* Quick verified M3U presets */}
+            <div className="pt-3 border-t border-slate-900/80">
+              <span className="text-[11px] font-semibold text-slate-400 block mb-2">
+                Quick Verified M3U Playlist Presets:
+              </span>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewName('Global English TV (M3U)');
+                    setNewType('M3U_PLAYLIST');
+                    setNewUrl('https://iptv-org.github.io/iptv/languages/eng.m3u');
+                  }}
+                  className="px-2.5 py-1 text-[11px] bg-slate-900 hover:bg-slate-800 text-sky-300 border border-sky-500/30 rounded-lg transition cursor-pointer"
+                >
+                  🌍 Global English TV (2,800+ ch)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewName('World News 24/7 (M3U)');
+                    setNewType('M3U_PLAYLIST');
+                    setNewUrl('https://iptv-org.github.io/iptv/categories/news.m3u');
+                  }}
+                  className="px-2.5 py-1 text-[11px] bg-slate-900 hover:bg-slate-800 text-emerald-300 border border-emerald-500/30 rounded-lg transition cursor-pointer"
+                >
+                  📰 World News 24/7 (900+ ch)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewName('Sports & Outdoors (M3U)');
+                    setNewType('M3U_PLAYLIST');
+                    setNewUrl('https://iptv-org.github.io/iptv/categories/sports.m3u');
+                  }}
+                  className="px-2.5 py-1 text-[11px] bg-slate-900 hover:bg-slate-800 text-amber-300 border border-amber-500/30 rounded-lg transition cursor-pointer"
+                >
+                  ⚽ Live Sports (450+ ch)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewName('Music & Concerts (M3U)');
+                    setNewType('M3U_PLAYLIST');
+                    setNewUrl('https://iptv-org.github.io/iptv/categories/music.m3u');
+                  }}
+                  className="px-2.5 py-1 text-[11px] bg-slate-900 hover:bg-slate-800 text-purple-300 border border-purple-500/30 rounded-lg transition cursor-pointer"
+                >
+                  🎵 Music (700+ ch)
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 

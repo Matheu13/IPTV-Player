@@ -36,25 +36,35 @@ export const ChannelManagementZapper: React.FC<ChannelManagementZapperProps> = (
   const [newBouquetDesc, setNewBouquetDesc] = useState<string>('');
   const [selectedBouquetId, setSelectedBouquetId] = useState<string | null>(null);
   const [zapperNotice, setZapperNotice] = useState<string | null>(null);
+  const [zapperSearch, setZapperSearch] = useState<string>('');
+  const [windowOffset, setWindowOffset] = useState<number>(0);
 
   // Remote & Keypad State
   const [keypadBuffer, setKeypadBuffer] = useState<string>('');
   const [currentChannelIndex, setCurrentChannelIndex] = useState<number>(0);
 
-  // Mock list of active channels
-  const rawChannels: UnifiedChannel[] = FIXTURE_STREAMS_SAMPLE.map((s, i) => ({
-    id: String(s.stream_id),
-    streamId: s.stream_id,
-    name: s.name,
-    streamType: 'live',
-    categoryId: s.category_id,
-    tvArchive: Boolean(s.tv_archive),
-    sourceType: 'XTREAM',
-    formatsAvailable: ['m3u8', 'ts'],
-    num: s.num || i + 1,
-  }));
+  // Virtualized Data Loader hydration
+  const windowResult = ChannelManager.getHydratedWindow(windowOffset, 100, {
+    searchQuery: zapperSearch,
+  });
+
+  const rawChannels: UnifiedChannel[] =
+    windowResult.channels.length > 0
+      ? windowResult.channels
+      : FIXTURE_STREAMS_SAMPLE.map((s, i) => ({
+          id: String(s.stream_id),
+          streamId: s.stream_id,
+          name: s.name,
+          streamType: 'live',
+          categoryId: s.category_id,
+          tvArchive: Boolean(s.tv_archive),
+          sourceType: 'XTREAM',
+          formatsAvailable: ['m3u8', 'ts'],
+          num: s.num || i + 1,
+        }));
 
   const transformedChannels = ChannelManager.applyOverrides(rawChannels);
+  const memStats = ChannelManager.getMemoryStats();
 
   const reloadData = () => {
     setFavorites(ChannelManager.getFavorites());
@@ -293,14 +303,56 @@ export const ChannelManagementZapper: React.FC<ChannelManagementZapperProps> = (
 
           {/* Channel Surfing Guide & Debounce Telemetry */}
           <div className="md:col-span-7 bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-800 gap-2">
               <div>
-                <h3 className="text-sm font-bold text-white">Live Channel Surfing Map</h3>
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <span>Live Channel Surfing Map</span>
+                  <span className="text-[10px] font-mono text-cyan-300 bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-800/60">
+                    Window: {transformedChannels.length} / {windowResult.totalMatching.toLocaleString()} channels ({memStats.memorySavedPercent}% RAM saved)
+                  </span>
+                </h3>
                 <p className="text-xs text-slate-400">Click any channel or use the remote to zap instantly.</p>
               </div>
-              <span className="text-xs font-mono text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-800">
+              <span className="text-xs font-mono text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-800 self-start sm:self-auto">
                 250ms Anti-Flood Guard
               </span>
+            </div>
+
+            {/* Virtualized Search & Pagination Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-950/70 p-2 rounded-lg border border-slate-800/80">
+              <input
+                id="zapper-channel-search"
+                type="text"
+                placeholder="Search channel name, number, or category..."
+                value={zapperSearch}
+                onChange={(e) => {
+                  setZapperSearch(e.target.value);
+                  setWindowOffset(0);
+                }}
+                className="bg-slate-900 border border-slate-800 rounded-md px-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 flex-1 min-w-[180px]"
+              />
+
+              <div className="flex items-center gap-1.5 text-xs">
+                <button
+                  id="zapper-prev-page-btn"
+                  onClick={() => setWindowOffset((prev) => Math.max(0, prev - 100))}
+                  disabled={windowOffset <= 0}
+                  className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-slate-300 border border-slate-800 text-[11px] font-mono"
+                >
+                  ◀ Prev 100
+                </button>
+                <span className="text-[11px] font-mono text-slate-400 px-1">
+                  {windowOffset + 1}–{Math.min(windowOffset + 100, windowResult.totalMatching)} of {windowResult.totalMatching}
+                </span>
+                <button
+                  id="zapper-next-page-btn"
+                  onClick={() => setWindowOffset((prev) => prev + 100)}
+                  disabled={windowOffset + 100 >= windowResult.totalMatching}
+                  className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-slate-300 border border-slate-800 text-[11px] font-mono"
+                >
+                  Next 100 ▶
+                </button>
+              </div>
             </div>
 
             <div className="space-y-2">

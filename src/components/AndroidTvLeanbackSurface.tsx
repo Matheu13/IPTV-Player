@@ -835,7 +835,7 @@ export const AndroidTvLeanbackSurface: React.FC = () => {
               <div className="grid grid-cols-3 gap-1.5">
                 {[1, 2, 3, 4, 5, 6, 7, 8, 9, 0].map((num) => (
                   <button
-                    key={num}
+                    key={`tv-keypad-digit-${num}`}
                     onClick={() => tvRemoteBridge.handleDigitInput(String(num))}
                     className={`py-2 rounded-lg bg-slate-800/80 hover:bg-indigo-600 text-slate-200 hover:text-white font-mono font-bold text-sm transition-colors ${
                       num === 0 ? 'col-span-3' : ''

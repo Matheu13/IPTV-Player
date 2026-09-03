@@ -379,11 +379,11 @@ export const MoviesScreen: React.FC<MoviesScreenProps> = () => {
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-5">
-            {filteredMovies.map((movie) => {
+            {filteredMovies.map((movie, idx) => {
               const inWatchlist = watchlist.includes(movie.streamId);
               return (
                 <div
-                  key={movie.id}
+                  key={`movie-card-${movie.id || movie.streamId}-${idx}`}
                   onClick={() => setSelectedMovie(movie)}
                   className="group relative bg-[#111722] rounded-xl overflow-hidden border border-slate-800/80 hover:border-sky-500/60 shadow-lg transition-all duration-300 transform hover:-translate-y-1 cursor-pointer flex flex-col"
                 >

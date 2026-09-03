@@ -444,7 +444,7 @@ export const LeanbackSpatialSurface: React.FC = () => {
               <div className="grid grid-cols-3 gap-1.5 text-xs font-mono font-bold">
                 {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
                   <button
-                    key={num}
+                    key={`remote-num-btn-${num}`}
                     onClick={() => handleRemoteClick('NUMERIC_DIGIT', num)}
                     className="p-2 bg-slate-800 hover:bg-indigo-600 rounded text-slate-200 hover:text-white transition"
                   >

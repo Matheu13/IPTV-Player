@@ -18,7 +18,7 @@ const httpAgent = new http.Agent({
   keepAliveMsecs: 5000,
   maxSockets: 64,
   maxFreeSockets: 16,
-  timeout: 15000,
+  timeout: 8000,
 });
 
 const httpsAgent = new https.Agent({
@@ -26,7 +26,7 @@ const httpsAgent = new https.Agent({
   keepAliveMsecs: 5000,
   maxSockets: 64,
   maxFreeSockets: 16,
-  timeout: 15000,
+  timeout: 8000,
 });
 
 /**
@@ -96,7 +96,7 @@ export function rewriteM3u8Playlist(manifestText: string, finalTargetUrl: string
 
       // Handle Key URIs
       if (trimmed.startsWith('#EXT-X-KEY')) {
-        return trimmed.replace(/URI="([^"]+)"/, (match, uri) => {
+        return trimmed.replace(/URI="([^"]+)"/, (_match, uri) => {
           let resolvedKeyUrl = uri;
           if (uri.startsWith('/')) {
             resolvedKeyUrl = origin + uri;
@@ -110,12 +110,17 @@ export function rewriteM3u8Playlist(manifestText: string, finalTargetUrl: string
       // Skip other comment tags
       if (trimmed.startsWith('#')) return line;
 
-      // Segment URL line
+      // Segment or Sub-Playlist URL line
       let segUrl = trimmed;
       if (trimmed.startsWith('/')) {
         segUrl = origin + trimmed;
       } else if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
         segUrl = baseDir + trimmed;
+      }
+
+      // If the line points to a variant sub-manifest (.m3u8), route through /api/stream/proxy so its segments are also rewritten
+      if (segUrl.toLowerCase().includes('.m3u8')) {
+        return `/api/stream/proxy?url=${encodeURIComponent(segUrl)}`;
       }
 
       return `/api/stream/segment?url=${encodeURIComponent(segUrl)}`;
@@ -128,8 +133,9 @@ export function rewriteM3u8Playlist(manifestText: string, finalTargetUrl: string
  */
 export function fetchManifestWithRedirects(
   targetUrl: string,
-  maxRedirects = 5,
-  retryCount = 2
+  maxRedirects = 3,
+  retryCount = 0,
+  timeoutMs = 1800
 ): Promise<{ text: string; finalUrl: string; statusCode: number } | null> {
   return new Promise((resolve) => {
     if (maxRedirects <= 0) {
@@ -161,22 +167,27 @@ export function fetchManifestWithRedirects(
         Accept: '*/*',
         Connection: 'keep-alive',
       },
-      timeout: 10000,
+      timeout: timeoutMs,
     };
 
+    let isDone = false;
+
     const req = protocol.get(options, (res) => {
+      if (isDone) return;
+
       // Follow redirects
       if (
         res.statusCode &&
         [301, 302, 303, 307, 308].includes(res.statusCode) &&
         res.headers.location
       ) {
+        isDone = true;
         let redirectUrl = res.headers.location;
         if (redirectUrl.startsWith('/')) {
           redirectUrl = `${parsed.protocol}//${parsed.host}${redirectUrl}`;
         }
         req.destroy();
-        return fetchManifestWithRedirects(redirectUrl, maxRedirects - 1, retryCount).then(resolve);
+        return fetchManifestWithRedirects(redirectUrl, maxRedirects - 1, retryCount, timeoutMs).then(resolve);
       }
 
       let data = '';
@@ -185,35 +196,47 @@ export function fetchManifestWithRedirects(
         data += chunk;
       });
       res.on('end', () => {
-        resolve({
-          text: data,
-          finalUrl: targetUrl,
-          statusCode: res.statusCode || 200,
-        });
+        if (!isDone) {
+          isDone = true;
+          resolve({
+            text: data,
+            finalUrl: targetUrl,
+            statusCode: res.statusCode || 200,
+          });
+        }
       });
       res.on('error', () => {
-        if (retryCount > 0) {
-          fetchManifestWithRedirects(targetUrl, maxRedirects, retryCount - 1).then(resolve);
-        } else {
-          resolve(null);
+        if (!isDone) {
+          isDone = true;
+          if (retryCount > 0) {
+            fetchManifestWithRedirects(targetUrl, maxRedirects, retryCount - 1, timeoutMs).then(resolve);
+          } else {
+            resolve(null);
+          }
         }
       });
     });
 
     req.on('timeout', () => {
-      req.destroy();
-      if (retryCount > 0) {
-        fetchManifestWithRedirects(targetUrl, maxRedirects, retryCount - 1).then(resolve);
-      } else {
-        resolve(null);
+      if (!isDone) {
+        isDone = true;
+        req.destroy();
+        if (retryCount > 0) {
+          fetchManifestWithRedirects(targetUrl, maxRedirects, retryCount - 1, timeoutMs).then(resolve);
+        } else {
+          resolve(null);
+        }
       }
     });
 
     req.on('error', () => {
-      if (retryCount > 0) {
-        fetchManifestWithRedirects(targetUrl, maxRedirects, retryCount - 1).then(resolve);
-      } else {
-        resolve(null);
+      if (!isDone) {
+        isDone = true;
+        if (retryCount > 0) {
+          fetchManifestWithRedirects(targetUrl, maxRedirects, retryCount - 1, timeoutMs).then(resolve);
+        } else {
+          resolve(null);
+        }
       }
     });
   });
@@ -228,20 +251,23 @@ export async function handleLiveStreamProxy(
   req: Request,
   res: Response
 ): Promise<void> {
-  // Check if this channel has a custom URL in sqlite DB
+  // Check if this channel has an ingested URL in sqlite DB
   try {
-    const ch = sqliteEpgDB.getLiveChannel(streamId);
+    const sourceId = req.query.sourceId ? String(req.query.sourceId) : undefined;
+    const ch = sqliteEpgDB.getLiveChannel(streamId, sourceId);
     if (ch && ch.resolved_stream_url && ch.resolved_stream_url.startsWith('http')) {
       return handleUniversalProxy(ch.resolved_stream_url, req, res);
     }
-  } catch {}
+  } catch (err: any) {
+    console.warn('[handleLiveStreamProxy] Error querying channel stream from DB:', err.message);
+  }
 
   const creds = getActiveXtreamCredentials();
   const targetUrl = `${creds.baseUrl}/live/${creds.username}/${creds.password}/${streamId}.${format}`;
 
   if (format === 'm3u8') {
     try {
-      const manifestResult = await fetchManifestWithRedirects(targetUrl);
+      const manifestResult = await fetchManifestWithRedirects(targetUrl, 2, 0, 3000);
 
       if (manifestResult && manifestResult.statusCode === 200 && manifestResult.text.includes('#EXTM3U')) {
         const rewritten = rewriteM3u8Playlist(manifestResult.text, manifestResult.finalUrl);
@@ -254,18 +280,23 @@ export async function handleLiveStreamProxy(
         return;
       }
 
-      // If upstream returned non-M3U8 (or direct stream/404 on m3u8), fallback to resilient HLS
-      return serveResilientFallbackHls(streamId, res);
+      // If upstream failed or returned non-200, respond with upstream error (no hardcoded overrides)
+      if (!res.headersSent) {
+        res.status(502).json({ error: `Channel stream ${streamId} unreachable upstream` });
+      }
     } catch {
-      // Direct resilient fallback on connection error
-      return serveResilientFallbackHls(streamId, res);
+      if (!res.headersSent) {
+        res.status(502).json({ error: `Failed to connect to upstream stream ${streamId}` });
+      }
     }
   } else {
-    // Direct TS stream or resilient fallback
+    // Direct TS stream
     try {
       return streamDirectMedia(targetUrl, req, res);
     } catch {
-      return serveResilientFallbackHls(streamId, res);
+      if (!res.headersSent) {
+        res.status(502).json({ error: `Failed to stream TS media for channel ${streamId}` });
+      }
     }
   }
 }
@@ -273,20 +304,33 @@ export async function handleLiveStreamProxy(
 /**
  * Serves a guaranteed playable HLS stream for channels when upstream provider is offline
  */
-export function serveResilientFallbackHls(streamId: string | number, res: Response): void {
+export function serveResilientFallbackHls(
+  streamId: string | number,
+  req: Request,
+  res: Response
+): void {
   if (res.headersSent) return;
 
+  // Real 24/7 live television broadcast streams (NO synthetic test patterns / NO Tears of Steel)
   const fallbackHlsStreams = [
-    'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
-    'https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8',
-    'https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8',
+    'https://dwamdstream102.akamaized.net/hls/live/2015525/dwstream102/index.m3u8', // DW News Live HD
+    'https://rbmn-live.akamaized.net/hls/live/590964/BoRB-AT/master.m3u8', // Red Bull TV Live HD
+    'https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/5d8a9f029fa2a061c518884c/master.m3u8?advertisingId=&appName=web&appVersion=unknown&appStoreUrl=&architecture=&buildVersion=&clientTime=0&deviceDNT=0&deviceId=unknown&deviceMake=Chrome&deviceModel=Chrome&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=unknown&userId=', // Pluto TV Movies
+    'https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/569546031a619b8f753147e4/master.m3u8?advertisingId=&appName=web&appVersion=unknown&appStoreUrl=&architecture=&buildVersion=&clientTime=0&deviceDNT=0&deviceId=unknown&deviceMake=Chrome&deviceModel=Chrome&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=unknown&userId=', // Pluto TV Sports
+    'https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/5cb9e09d17d54d19bb810014/master.m3u8?advertisingId=&appName=web&appVersion=unknown&appStoreUrl=&architecture=&buildVersion=&clientTime=0&deviceDNT=0&deviceId=unknown&deviceMake=Chrome&deviceModel=Chrome&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=unknown&userId=', // Pluto TV News
+    'https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/59160d5b5bb2df4558e80bc8/master.m3u8?advertisingId=&appName=web&appVersion=unknown&appStoreUrl=&architecture=&buildVersion=&clientTime=0&deviceDNT=0&deviceId=unknown&deviceMake=Chrome&deviceModel=Chrome&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=unknown&userId=', // Pluto TV Action
+    'https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/5a973719bf3e6d15bf0fa5f9/master.m3u8?advertisingId=&appName=web&appVersion=unknown&appStoreUrl=&architecture=&buildVersion=&clientTime=0&deviceDNT=0&deviceId=unknown&deviceMake=Chrome&deviceModel=Chrome&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=unknown&userId=', // Pluto TV Music
   ];
 
   const numId = typeof streamId === 'number' ? streamId : parseInt(String(streamId).replace(/\D/g, '') || '0', 10);
   const targetFallback = fallbackHlsStreams[Math.abs(numId) % fallbackHlsStreams.length];
 
-  // Redirect to universal proxy for this reliable live stream
-  res.redirect(`/api/stream/proxy?url=${encodeURIComponent(targetFallback)}`);
+  // Directly serve the resilient stream proxy without redirect overhead
+  handleUniversalProxy(targetFallback, req, res).catch(() => {
+    if (!res.headersSent) {
+      res.redirect(targetFallback);
+    }
+  });
 }
 
 /**
@@ -306,7 +350,7 @@ export async function handleUniversalProxy(
 
   if (isM3u8) {
     try {
-      const manifestResult = await fetchManifestWithRedirects(targetUrl);
+      const manifestResult = await fetchManifestWithRedirects(targetUrl, 3, 1, 3000);
       if (manifestResult && manifestResult.statusCode === 200 && manifestResult.text.includes('#EXTM3U')) {
         const rewritten = rewriteM3u8Playlist(manifestResult.text, manifestResult.finalUrl);
         res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
@@ -318,7 +362,7 @@ export async function handleUniversalProxy(
         return;
       }
     } catch (err: any) {
-      console.warn('[handleUniversalProxy] Manifest fetch failed, falling back to direct media:', err.message);
+      console.warn('[handleUniversalProxy] Manifest fetch failed:', err.message);
     }
   }
 

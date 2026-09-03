@@ -392,11 +392,11 @@ export const SeriesScreen: React.FC<SeriesScreenProps> = () => {
       {/* 3. Series Catalog Grid */}
       <section className="max-w-7xl mx-auto w-full px-6 sm:px-10 py-6">
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-5">
-          {filteredSeries.map((series) => {
+          {filteredSeries.map((series, idx) => {
             const inWatchlist = watchlist.includes(series.seriesId);
             return (
               <div
-                key={series.id}
+                key={`series-card-${series.id || series.seriesId}-${idx}`}
                 onClick={() => {
                   setSelectedSeries(series);
                   setSelectedSeasonNumber(1);
@@ -512,9 +512,9 @@ export const SeriesScreen: React.FC<SeriesScreenProps> = () => {
             <div className="flex-1 p-6 overflow-y-auto space-y-3">
               {activeSeason && activeSeason.episodes && activeSeason.episodes.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {activeSeason.episodes.map((ep) => (
+                  {activeSeason.episodes.map((ep, epIdx) => (
                     <div
-                      key={ep.id}
+                      key={`ep-${ep.id || ep.episodeNum}-${epIdx}`}
                       onClick={() => {
                         handlePlayEpisode(selectedSeries, ep);
                         setSelectedSeries(null);

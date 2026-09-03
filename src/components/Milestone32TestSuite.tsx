@@ -341,7 +341,7 @@ export const Milestone32TestSuite: React.FC = () => {
                 <div className="flex items-center space-x-1.5">
                   {[101, 102, 103, 104, 105].map((num) => (
                     <button
-                      key={num}
+                      key={`test-zap-num-${num}`}
                       onClick={() => {
                         setSimDigitBuffer(String(num));
                         setSimLastAction(`ZAP ${num}`);

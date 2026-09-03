@@ -590,6 +590,35 @@ async function startServer() {
       const sourceId = `src_m3u_${Date.now()}`;
       const name = sourceName || (url ? `Remote M3U (${new URL(url).hostname})` : 'Imported M3U Playlist');
 
+      // Persist source, categories, and channels into SQLite DB
+      sqliteEpgDB.saveSource({
+        id: sourceId,
+        name,
+        sourceType: 'M3U',
+        baseUrl: url || 'direct_upload',
+        status: 'Connected',
+        maxConnections: 5,
+        channelCount: parsed.channels.length,
+        categoryCount: parsed.categories.length,
+        lastRefreshedAt: Date.now(),
+        metadataJson: JSON.stringify({ isDefault: true, format: 'm3u8', epgUrl: parsed.epgUrl }),
+      });
+
+      if (parsed.categories.length > 0) {
+        sqliteEpgDB.insertLiveCategories(
+          sourceId,
+          parsed.categories.map((c: any) => ({
+            id: c.id,
+            name: c.name,
+            channelCount: c.channelCount || 0,
+          }))
+        );
+      }
+
+      if (parsed.channels.length > 0) {
+        sqliteEpgDB.insertLiveChannelsBatch(sourceId, parsed.channels);
+      }
+
       addDiagnosticLog({
         component: 'M3UIngestEngine',
         errorClass: null,
@@ -914,16 +943,20 @@ async function startServer() {
         totalPages: Math.ceil(total / limit),
         channels: channels.map((c) => ({
           ...c,
-          id: c.stream_id,
+          id: `${c.source_id || 'src'}_${c.stream_id}`,
           streamId: c.stream_id,
+          sourceId: c.source_id,
           categoryId: c.category_id,
           categoryName: c.category_name,
           streamIcon: c.stream_icon,
           epgChannelId: c.epg_channel_id,
           tvArchive: Boolean(c.tv_archive),
-          streamUrl: `/api/stream/live/${c.stream_id}.m3u8`,
-          tsStreamUrl: `/api/stream/live/${c.stream_id}.ts`,
+          streamUrl: c.resolved_stream_url
+            ? `/api/stream/proxy?url=${encodeURIComponent(c.resolved_stream_url)}`
+            : `/api/stream/live/${c.stream_id}.m3u8?sourceId=${encodeURIComponent(c.source_id || '')}`,
+          tsStreamUrl: c.resolved_stream_url || `/api/stream/live/${c.stream_id}.ts`,
           rawStreamUrl: c.resolved_stream_url,
+          directUrl: c.resolved_stream_url,
           format: c.active_format || 'm3u8',
           formatsAvailable: c.formats_json ? JSON.parse(c.formats_json) : ['m3u8', 'ts'],
         })),
@@ -1904,55 +1937,54 @@ async function startServer() {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[IPTV Server] Running on http://localhost:${PORT}`);
 
-    // Auto-ingest default Xtream provider channels in background if DB has fewer than 14,000 channels
+    // Ensure real M3U broadcast channels are populated
     setTimeout(async () => {
       try {
         const count = sqliteEpgDB.getLiveChannelsCount();
-        if (count < 14000) {
-          console.log('[AutoIngest] Populating 14,917 live channels into database for provider lineup...');
-          const host = 'http://dnsjibre.xyz:80';
-          const user = 'B3GC9NESBU82M3W';
-          const pass = '2pFz3E7P3d';
-          const sourceId = 'src_xtream_prime';
-          const provName = 'Ultra Xtream Platinum (dnsjibre.xyz)';
-
-          const generated = generateProviderCatalog(14917, sourceId, provName);
-
-          sqliteEpgDB.saveSource({
-            id: sourceId,
-            name: provName,
-            sourceType: 'XTREAM',
-            baseUrl: host,
-            username: user,
-            status: 'Connected',
-            maxConnections: 2,
-            channelCount: generated.channels.length,
-            categoryCount: generated.categories.length,
-            lastRefreshedAt: Date.now(),
-            metadataJson: JSON.stringify({
-              expirationDate: '2028-12-31',
-              allowedFormats: ['m3u8', 'ts'],
-              password: pass,
-            }),
+        if (count === 0) {
+          console.log('[AutoIngest] Seeding genuine live channels from remote M3U playlist...');
+          const m3uUrl = 'https://iptv-org.github.io/iptv/languages/eng.m3u';
+          const fetchRes = await fetch(m3uUrl, {
+            headers: { 'User-Agent': 'Mozilla/5.0' },
           });
+          if (fetchRes.ok) {
+            const text = await fetchRes.text();
+            const parsed = parseM3UPlaylist(text);
+            const sourceId = 'src_m3u_eng';
+            const provName = 'Global English Broadcasts (M3U)';
 
-          sqliteEpgDB.insertLiveCategories(
-            sourceId,
-            generated.categories.map((c) => ({
-              id: String(c.id),
-              name: c.name,
-              parentId: typeof c.parentId === 'number' ? c.parentId : undefined,
-              channelCount: c.channelCount,
-            }))
-          );
+            sqliteEpgDB.saveSource({
+              id: sourceId,
+              name: provName,
+              sourceType: 'M3U',
+              baseUrl: m3uUrl,
+              status: 'Connected',
+              maxConnections: 5,
+              channelCount: parsed.channels.length,
+              categoryCount: parsed.categories.length,
+              lastRefreshedAt: Date.now(),
+              metadataJson: JSON.stringify({ isDefault: true, format: 'm3u8', epgUrl: parsed.epgUrl }),
+            });
 
-          sqliteEpgDB.insertLiveChannelsBatch(sourceId, generated.channels);
-          console.log(`[AutoIngest] Successfully populated ${generated.channels.length} live channels in SQLite.`);
+            if (parsed.categories.length > 0) {
+              sqliteEpgDB.insertLiveCategories(
+                sourceId,
+                parsed.categories.map((c: any) => ({
+                  id: c.id,
+                  name: c.name,
+                  channelCount: c.channelCount || 0,
+                }))
+              );
+            }
+
+            sqliteEpgDB.insertLiveChannelsBatch(sourceId, parsed.channels);
+            console.log(`[AutoIngest] Successfully populated ${parsed.channels.length} real M3U channels in SQLite.`);
+          }
         }
       } catch (err: any) {
-        console.warn('[AutoIngest] Background ingestion notice:', err.message);
+        console.warn('[AutoIngest] Notice:', err.message);
       }
-    }, 100);
+    }, 200);
   });
 }
 

@@ -1051,12 +1051,12 @@ export const DesignSystemShowcase: React.FC = () => {
               </span>
 
               <div className="space-y-2">
-                {sampleChannels.map((ch) => (
+                {sampleChannels.map((ch, idx) => (
                   <ChannelRow
-                    key={ch.id}
+                    key={`showcase-sample-ch-${ch.id}-${idx}`}
                     channel={ch}
                     density={density}
-                    onSelect={(selected) => alert(`Selected: ${selected.name}`)}
+                    onSelect={(selected) => console.log(`Selected: ${selected.name}`)}
                   />
                 ))}
               </div>

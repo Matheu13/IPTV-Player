@@ -49,6 +49,9 @@ export const SettingsScreen: React.FC = () => {
   const [activeTab, setActiveTab] = useState<SettingsTab>('sources');
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [activeSourceId, setActiveSourceId] = useState<string>(
+    globalUnifiedIptvEngine.getState().activeSourceId
+  );
 
   // Playback Settings State
   const [hwAccel, setHwAccel] = useState<'d3d11' | 'opengl' | 'software'>('d3d11');
@@ -56,41 +59,35 @@ export const SettingsScreen: React.FC = () => {
   const [defaultAudio, setDefaultAudio] = useState<'eng' | 'fra' | 'und'>('und');
   const [subSize, setSubSize] = useState<'small' | 'medium' | 'large'>('medium');
 
-  // Provider Sources State
-  const [sources, setSources] = useState<SourceItem[]>([
-    {
-      id: 'src-1',
-      name: 'Primary Xtream Codes IPTV',
-      type: 'Xtream Codes API',
-      url: 'http://iptv-provider.example:8080',
-      status: 'Connected',
-      channels: 10420,
-      active: true,
-      username: 'user_live_sports',
-      password: '••••••••',
-      maxConnections: 2,
-    },
-    {
-      id: 'src-2',
-      name: 'Emergency M3U8 Mirror',
-      type: 'M3U / M3U8 Feed',
-      url: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
-      status: 'Connected',
-      channels: 85,
-      active: true,
-      maxConnections: 1,
-    },
-    {
-      id: 'src-3',
-      name: 'Local HDHomeRun RF Tuner',
-      type: 'HDHomeRun ATSC 3.0',
-      url: 'http://192.168.1.150:5004',
-      status: 'Standby',
-      channels: 42,
-      active: false,
-      maxConnections: 4,
-    },
-  ]);
+  // Provider Sources State - synchronized with Unified Engine
+  const [sources, setSources] = useState<SourceItem[]>([]);
+
+  useEffect(() => {
+    const syncSources = () => {
+      const engineSources = globalUnifiedIptvEngine.getSources();
+      const mapped: SourceItem[] = engineSources.map((s) => ({
+        id: s.id,
+        name: s.name,
+        type: s.type,
+        url: s.url,
+        status: s.status === 'ONLINE' ? 'Connected' : s.status === 'REFRESHING' ? 'Standby' : 'Offline',
+        channels: s.channelCount,
+        active: s.enabled,
+      }));
+      setSources(mapped);
+      setActiveSourceId(globalUnifiedIptvEngine.getState().activeSourceId);
+    };
+
+    syncSources();
+    const unsub = globalUnifiedIptvEngine.subscribe(syncSources);
+    return () => unsub();
+  }, []);
+
+  const handleSetActiveProvider = (id: string, name: string) => {
+    globalUnifiedIptvEngine.setActiveSource(id);
+    setActiveSourceId(id);
+    showFeedback(`Active provider set to "${name}".`);
+  };
 
   // Modal State for Add / Edit Provider
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -417,6 +414,17 @@ export const SettingsScreen: React.FC = () => {
                   </div>
 
                   <div className="flex items-center gap-2 self-end sm:self-auto">
+                    <button
+                      id={`set-active-src-${src.id}`}
+                      onClick={() => handleSetActiveProvider(src.id, src.name)}
+                      className={`px-3 py-1 rounded-lg text-xs font-semibold border transition cursor-pointer ${
+                        activeSourceId === src.id
+                          ? 'bg-sky-500 text-white border-sky-400 font-bold shadow-md'
+                          : 'bg-slate-800 text-slate-300 hover:text-white border-slate-700'
+                      }`}
+                    >
+                      {activeSourceId === src.id ? 'Active Provider' : 'Switch To'}
+                    </button>
                     <button
                       onClick={() => handleToggleActive(src.id)}
                       className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition cursor-pointer ${

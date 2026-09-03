@@ -91,7 +91,7 @@ export const MultiViewMatrix: React.FC<MultiViewMatrixProps> = ({
 
           return (
             <div
-              key={ch.id}
+              key={`multiview-stream-${ch.id}-${idx}`}
               onClick={() => setAudioFocusIndex(idx)}
               className={`relative aspect-video rounded-xl overflow-hidden bg-slate-950 border transition-all cursor-pointer group select-none ${
                 isPrimaryIn1Plus3 ? 'md:col-span-2 md:row-span-2' : ''

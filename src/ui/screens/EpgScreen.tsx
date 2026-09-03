@@ -21,10 +21,15 @@ import {
   Radio,
   X,
   Volume2,
+  MoreVertical,
+  Crosshair,
 } from 'lucide-react';
 import { UnifiedEpgProgram } from '../../types';
 import { globalUnifiedIptvEngine, UnifiedChannel } from '../../lib/unifiedIptvEngine';
 import { usePlayback } from '../context/PlaybackContext';
+import { ProviderSwitcher } from '../components/ProviderSwitcher';
+import { ChannelLogo } from '../components/ChannelLogo';
+import { ChannelActionModal } from '../components/ChannelActionModal';
 
 const EPG_CATEGORIES = [
   'ALL',
@@ -65,6 +70,7 @@ export const EpgScreen: React.FC = () => {
     prog: EpgScheduleItem['programs'][0];
     channel: EpgScheduleItem;
   } | null>(null);
+  const [channelActionTarget, setChannelActionTarget] = useState<UnifiedChannel | null>(null);
   const [zoomLevel, setZoomLevel] = useState<'compact' | 'normal' | 'wide'>('normal');
   const [currentTimeMs, setCurrentTimeMs] = useState<number>(Date.now());
   const [channels, setChannels] = useState<UnifiedChannel[]>([]);
@@ -74,7 +80,7 @@ export const EpgScreen: React.FC = () => {
   useEffect(() => {
     const load = () => {
       const live = globalUnifiedIptvEngine.getChannels();
-      setChannels(live.slice(0, 40));
+      setChannels(live.slice(0, 50));
     };
     load();
     const unsub = globalUnifiedIptvEngine.subscribe(load);
@@ -86,6 +92,17 @@ export const EpgScreen: React.FC = () => {
     const timer = setInterval(() => setCurrentTimeMs(Date.now()), 15000);
     return () => clearInterval(timer);
   }, []);
+
+  // Jump to Current Time
+  const handleJumpToNow = () => {
+    if (!timelineScrollRef.current) return;
+    const now = new Date();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0).getTime();
+    const elapsedHours = (Date.now() - startOfDay) / 3600000;
+    const pxPerHour = zoomLevel === 'compact' ? 180 : zoomLevel === 'wide' ? 360 : 260;
+    const targetScroll = Math.max(0, elapsedHours * pxPerHour - 200);
+    timelineScrollRef.current.scrollTo({ left: targetScroll, behavior: 'smooth' });
+  };
 
   // Base schedule generator for today
   const timeSlots = useMemo(() => {
@@ -237,6 +254,15 @@ export const EpgScreen: React.FC = () => {
 
         {/* Search & Zoom Controls */}
         <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end">
+          <button
+            onClick={handleJumpToNow}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-500/20 text-sky-300 border border-sky-500/30 hover:bg-sky-500 hover:text-slate-950 font-bold text-xs transition"
+            title="Scroll to Current Live Programs"
+          >
+            <Crosshair className="w-3.5 h-3.5" />
+            <span>Jump to Now</span>
+          </button>
+
           <div className="relative w-48 sm:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
             <input
@@ -277,24 +303,30 @@ export const EpgScreen: React.FC = () => {
         </div>
       </header>
 
-      {/* 2. Category Filter Bar */}
-      <div className="px-6 py-2.5 bg-[#080b11] border-b border-white/5 flex items-center gap-2 overflow-x-auto no-scrollbar shrink-0">
-        {EPG_CATEGORIES.map((cat) => {
-          const isSelected = selectedCategory === cat;
-          return (
-            <button
-              key={cat}
-              onClick={() => setSelectedCategory(cat)}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
-                isSelected
-                  ? 'bg-sky-500 text-white shadow-md shadow-sky-500/20'
-                  : 'bg-[#111722] text-slate-400 border border-slate-800 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              {cat}
-            </button>
-          );
-        })}
+      {/* 2. Provider & Category Filter Bar */}
+      <div className="px-6 py-2 bg-[#080b11] border-b border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+          {EPG_CATEGORIES.map((cat) => {
+            const isSelected = selectedCategory === cat;
+            return (
+              <button
+                key={cat}
+                onClick={() => setSelectedCategory(cat)}
+                className={`px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
+                  isSelected
+                    ? 'bg-sky-500 text-white shadow-md shadow-sky-500/20'
+                    : 'bg-[#111722] text-slate-400 border border-slate-800 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                {cat}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <ProviderSwitcher variant="pill" />
+        </div>
       </div>
 
       {/* 3. Main Timeline Grid Surface */}
@@ -305,29 +337,50 @@ export const EpgScreen: React.FC = () => {
             Channels ({filteredSchedule.length})
           </div>
           <div className="flex-1 overflow-y-hidden divide-y divide-white/5">
-            {filteredSchedule.map((item) => (
-              <div
-                key={item.id}
-                onClick={() => handleTuneChannel(item)}
-                className="h-16 px-4 flex items-center gap-3 hover:bg-slate-800/60 transition cursor-pointer group"
-              >
-                <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center shrink-0 border border-white/10 overflow-hidden">
-                  {item.channelLogo ? (
-                    <img src={item.channelLogo} alt={item.channelName} className="w-full h-full object-contain" />
-                  ) : (
-                    <Tv className="w-4 h-4 text-sky-400" />
+            {filteredSchedule.map((item, idx) => {
+              const matchingUnifiedChannel = channels.find((c) => c.id === item.channelId);
+              return (
+                <div
+                  key={`epg-ch-sidebar-${item.channelId || item.id}-${idx}`}
+                  onClick={() => handleTuneChannel(item)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    if (matchingUnifiedChannel) {
+                      setChannelActionTarget(matchingUnifiedChannel);
+                    }
+                  }}
+                  className="h-16 px-3 flex items-center gap-2.5 hover:bg-slate-800/60 transition cursor-pointer group relative"
+                >
+                  <ChannelLogo
+                    name={item.channelName}
+                    logoUrl={item.channelLogo}
+                    category={item.category}
+                    size="sm"
+                    showBadgeBorder={true}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-bold text-white group-hover:text-sky-300 transition-colors line-clamp-1">
+                      {item.channelName}
+                    </div>
+                    <div className="text-[10px] text-slate-400 font-mono line-clamp-1">
+                      {item.category}
+                    </div>
+                  </div>
+                  {matchingUnifiedChannel && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setChannelActionTarget(matchingUnifiedChannel);
+                      }}
+                      className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-slate-700 text-slate-400 hover:text-white transition"
+                      title="Options"
+                    >
+                      <MoreVertical className="w-3.5 h-3.5" />
+                    </button>
                   )}
                 </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs font-bold text-white group-hover:text-sky-300 transition-colors line-clamp-1">
-                    {item.channelName}
-                  </div>
-                  <div className="text-[10px] text-slate-400 font-mono line-clamp-1">
-                    {item.category}
-                  </div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -352,9 +405,9 @@ export const EpgScreen: React.FC = () => {
 
           {/* Channel Program Rows */}
           <div style={{ width: `${24 * pxPerHour}px` }} className="divide-y divide-white/5">
-            {filteredSchedule.map((item) => (
-              <div key={item.id} className="h-16 relative flex items-center p-1">
-                {item.programs.map((prog) => {
+            {filteredSchedule.map((item, idx) => (
+              <div key={`epg-row-${item.channelId || item.id}-${idx}`} className="h-16 relative flex items-center p-1">
+                {item.programs.map((prog, pIdx) => {
                   const now = new Date();
                   const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0).getTime();
                   const startOffsetHours = (prog.startTime - startOfDay) / 3600000;
@@ -365,7 +418,7 @@ export const EpgScreen: React.FC = () => {
 
                   return (
                     <div
-                      key={prog.id}
+                      key={`epg-prog-${prog.id || `${item.id}-${pIdx}`}`}
                       onClick={() => setSelectedProgram({ prog, channel: item })}
                       style={{
                         position: 'absolute',
@@ -482,6 +535,43 @@ export const EpgScreen: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* 5. Channel Interaction & Settings Modal */}
+      <ChannelActionModal
+        channel={channelActionTarget}
+        isOpen={Boolean(channelActionTarget)}
+        onClose={() => setChannelActionTarget(null)}
+        onPlayFullscreen={() => {
+          if (channelActionTarget) {
+            playChannel({
+              id: channelActionTarget.id,
+              channelNumber: channelActionTarget.channelNumber,
+              name: channelActionTarget.name,
+              category: channelActionTarget.category,
+              sourceName: channelActionTarget.sourceName,
+              sourceId: channelActionTarget.sourceId,
+              streamUrl: channelActionTarget.streamUrl,
+              is4k: channelActionTarget.resolution?.includes('4K'),
+            }, 'fullscreen');
+            setChannelActionTarget(null);
+          }
+        }}
+        onPlayPreview={() => {
+          if (channelActionTarget) {
+            playChannel({
+              id: channelActionTarget.id,
+              channelNumber: channelActionTarget.channelNumber,
+              name: channelActionTarget.name,
+              category: channelActionTarget.category,
+              sourceName: channelActionTarget.sourceName,
+              sourceId: channelActionTarget.sourceId,
+              streamUrl: channelActionTarget.streamUrl,
+              is4k: channelActionTarget.resolution?.includes('4K'),
+            }, 'embedded');
+            setChannelActionTarget(null);
+          }
+        }}
+      />
     </div>
   );
 };

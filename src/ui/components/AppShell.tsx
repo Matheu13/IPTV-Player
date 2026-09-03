@@ -13,12 +13,16 @@ import { DesignSystemShowcase } from './DesignSystemShowcase';
 import { VideoPlayerShell } from './VideoPlayerShell';
 import { PlaybackProvider, usePlayback } from '../context/PlaybackContext';
 import { ChannelRowData } from './ChannelRow';
+import { ProviderSwitcher } from './ProviderSwitcher';
+import { SourceManagementModal } from '../../components/SourceManagementModal';
+import { globalUnifiedIptvEngine } from '../../lib/unifiedIptvEngine';
 
 const AppShellContent: React.FC = () => {
   const [activeTab, setActiveTab] = useState<NavTabId>('home');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isTvMode, setIsTvMode] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [isSourceModalOpen, setIsSourceModalOpen] = useState(false);
 
   const { playChannel, state: playbackState } = usePlayback();
 
@@ -67,6 +71,16 @@ const AppShellContent: React.FC = () => {
         case 'd':
         case 'D':
           setActiveTab('showcase');
+          break;
+        case 'p':
+        case 'P':
+          // Cycle through providers
+          const sources = globalUnifiedIptvEngine.getSources();
+          const currentId = globalUnifiedIptvEngine.getState().activeSourceId;
+          const allOptions = ['ALL', ...sources.map((s) => s.id)];
+          const curIdx = allOptions.indexOf(currentId);
+          const nextId = allOptions[(curIdx + 1) % allOptions.length];
+          globalUnifiedIptvEngine.setActiveSource(nextId);
           break;
         case '/':
           e.preventDefault();
@@ -117,46 +131,89 @@ const AppShellContent: React.FC = () => {
 
       {/* 2. Main Content Viewport */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative pb-16 md:pb-0">
+        {/* Top App Header with Global Provider Switcher */}
+        <header className="h-12 bg-[#090d16]/90 backdrop-blur-md border-b border-white/5 px-4 flex items-center justify-between shrink-0 z-20">
+          <div className="flex items-center gap-3">
+            <span className="text-xs uppercase tracking-wider font-extrabold text-slate-400">
+              {activeTab === 'home'
+                ? 'Overview'
+                : activeTab === 'live'
+                ? 'Live Channels'
+                : activeTab === 'epg'
+                ? 'Electronic Program Guide'
+                : activeTab === 'movies'
+                ? 'VOD Cinema'
+                : activeTab === 'series'
+                ? 'TV Shows'
+                : activeTab === 'favorites'
+                ? 'Pinned Favorites'
+                : activeTab === 'search'
+                ? 'Universal Index'
+                : activeTab === 'settings'
+                ? 'System Settings'
+                : 'Diagnostics'}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <ProviderSwitcher
+              variant="pill"
+              onOpenSourceManager={() => setIsSourceModalOpen(true)}
+              onProviderSwitched={(sourceId, sourceName) => {
+                // If on Live TV, it will automatically update filtered channels
+              }}
+            />
+          </div>
+        </header>
+
         {/* Navigation / Screen Switcher */}
-        {activeTab === 'home' && (
-          <HomeScreen
-            onNavigateToLive={() => setActiveTab('live')}
-            onNavigateToMovies={() => setActiveTab('movies')}
-            onNavigateToSeries={() => setActiveTab('series')}
-            onSelectChannel={handleSelectChannel}
-          />
-        )}
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          {activeTab === 'home' && (
+            <HomeScreen
+              onNavigateToLive={() => setActiveTab('live')}
+              onNavigateToMovies={() => setActiveTab('movies')}
+              onNavigateToSeries={() => setActiveTab('series')}
+              onSelectChannel={handleSelectChannel}
+            />
+          )}
 
-        {activeTab === 'live' && (
-          <LiveTVScreen
-            onSelectChannel={handleSelectChannel}
-            isTvMode={isTvMode}
-          />
-        )}
+          {activeTab === 'live' && (
+            <LiveTVScreen
+              onSelectChannel={handleSelectChannel}
+              isTvMode={isTvMode}
+            />
+          )}
 
-        {activeTab === 'movies' && <MoviesScreen />}
+          {activeTab === 'movies' && <MoviesScreen />}
 
-        {activeTab === 'series' && <SeriesScreen />}
+          {activeTab === 'series' && <SeriesScreen />}
 
-        {activeTab === 'epg' && <EpgScreen />}
+          {activeTab === 'epg' && <EpgScreen />}
 
-        {activeTab === 'favorites' && <FavoritesScreen />}
+          {activeTab === 'favorites' && <FavoritesScreen />}
 
-        {activeTab === 'search' && <SearchScreen />}
+          {activeTab === 'search' && <SearchScreen />}
 
-        {activeTab === 'showcase' && (
-          <div className="flex-1 overflow-y-auto bg-[#080b11]">
-            <DesignSystemShowcase />
-          </div>
-        )}
+          {activeTab === 'showcase' && (
+            <div className="flex-1 overflow-y-auto bg-[#080b11]">
+              <DesignSystemShowcase />
+            </div>
+          )}
 
-        {activeTab === 'settings' && <SettingsScreen />}
+          {activeTab === 'settings' && <SettingsScreen />}
 
-        {activeTab === 'diagnostics' && (
-          <div className="flex-1 overflow-y-auto bg-[#080b11] p-4">
-            <AdvancedDiagnosticsPanel />
-          </div>
-        )}
+          {activeTab === 'diagnostics' && (
+            <div className="flex-1 overflow-y-auto bg-[#080b11] p-4">
+              <AdvancedDiagnosticsPanel />
+            </div>
+          )}
+        </div>
+
+        {/* Global Source Management Modal */}
+        <SourceManagementModal
+          isOpen={isSourceModalOpen}
+          onClose={() => setIsSourceModalOpen(false)}
+        />
 
         {/* Global Persistent Video Player Shell (Handles mini-player / fullscreen across all views) */}
         {playbackState.presentationMode === 'fullscreen' ? (
