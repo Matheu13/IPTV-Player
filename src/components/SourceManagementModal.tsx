@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { IptvSource, globalUnifiedIptvEngine } from '../lib/unifiedIptvEngine';
 import { globalSourceMonitorEngine, SourceType } from '../lib/sourceMonitorEngine';
 import { multiSourceOrchestrator } from '../lib/multiSourceOrchestrator';
+import { M3UPlaylistManager } from '../ui/components/M3UPlaylistManager';
 import {
   Server,
   Plus,
@@ -19,12 +20,15 @@ import {
 interface SourceManagementModalProps {
   isOpen: boolean;
   onClose: () => void;
+  initialTab?: 'sources' | 'm3u';
 }
 
 export const SourceManagementModal: React.FC<SourceManagementModalProps> = ({
   isOpen,
   onClose,
+  initialTab = 'sources',
 }) => {
+  const [modalTab, setModalTab] = useState<'sources' | 'm3u'>(initialTab);
   const [sources, setSources] = useState<IptvSource[]>(globalUnifiedIptvEngine.getState().sources);
   const [activeSourceId, setActiveSourceId] = useState<string>(globalUnifiedIptvEngine.getState().activeSourceId);
   const [newName, setNewName] = useState('');
@@ -115,7 +119,7 @@ export const SourceManagementModal: React.FC<SourceManagementModalProps> = ({
     >
       <div
         id="source-management-modal-card"
-        className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]"
+        className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-5xl overflow-hidden flex flex-col max-h-[90vh]"
       >
         {/* Modal Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950/80">
@@ -139,8 +143,39 @@ export const SourceManagementModal: React.FC<SourceManagementModalProps> = ({
           </button>
         </div>
 
-        {/* Modal Body */}
-        <div className="p-6 overflow-y-auto space-y-6 flex-1 scrollbar-thin">
+        {/* Modal Tabs */}
+        <div className="px-6 bg-slate-950 border-b border-slate-800 flex items-center gap-2">
+          <button
+            onClick={() => setModalTab('sources')}
+            className={`px-4 py-2.5 text-xs font-semibold border-b-2 transition cursor-pointer flex items-center gap-2 ${
+              modalTab === 'sources'
+                ? 'border-indigo-500 text-white font-bold'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Server className="w-3.5 h-3.5" />
+            <span>Configured Sources ({sources.length})</span>
+          </button>
+          <button
+            onClick={() => setModalTab('m3u')}
+            className={`px-4 py-2.5 text-xs font-semibold border-b-2 transition cursor-pointer flex items-center gap-2 ${
+              modalTab === 'm3u'
+                ? 'border-sky-500 text-sky-300 font-bold'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Radio className="w-3.5 h-3.5 text-sky-400" />
+            <span>M3U Channel Lists &amp; Health</span>
+          </button>
+        </div>
+
+        {modalTab === 'm3u' ? (
+          <div className="flex-1 overflow-y-auto">
+            <M3UPlaylistManager standalone={false} />
+          </div>
+        ) : (
+          /* Modal Body */
+          <div className="p-6 overflow-y-auto space-y-6 flex-1 scrollbar-thin">
           {/* Active Sources List */}
           <div className="space-y-3">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
@@ -339,6 +374,7 @@ export const SourceManagementModal: React.FC<SourceManagementModalProps> = ({
             </div>
           </div>
         </div>
+        )}
 
         {/* Modal Footer */}
         <div className="px-6 py-3 border-t border-slate-800 bg-slate-950 flex items-center justify-between text-xs text-slate-400">

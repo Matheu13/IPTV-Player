@@ -110,16 +110,36 @@ export interface UnifiedIptvState {
 }
 
 const CATEGORIES = [
-  'Sports',
-  'News & Politics',
-  'Movies & Cinema',
-  'Entertainment',
-  'Documentary & Science',
-  'Kids & Animation',
-  'Music & Concerts',
-  'International Live',
-  '4K UHD Master Feeds',
-  'Regional Broadcasts',
+  'Sweden | Expressen Play',
+  'Sweden | Disney+',
+  'Sweden | max sports',
+  'Sweden | TeliaPlay Events',
+  'Sweden | ViaPlay Events',
+  'Sweden | TV4 Play Events',
+  'Sweden',
+  'Belgium',
+  'Canada | Local',
+  'Canada | Entertainment',
+  'Norway | TV2 Sport & Events',
+  'Norway | NRK & Allment',
+  'Norway',
+  'UK | GENERAL',
+  'UK | ENTERTAINMENT',
+  'UK | SPORTS',
+  'IRL | IRELAND',
+  'US | NEWS & NETWORKS',
+  'US | SPORTS & ENTERTAINMENT',
+  'EUROPE | FRANCE & GERMANY',
+  'EUROPE | SPAIN & ITALY',
+  'AFRICA | NIGERIA & PAN-AFRICA',
+  'AFRICA | SOUTH AFRICA & KENYA',
+  'ASIA | JAPAN & KOREA',
+  'ASIA | INDIA & GLOBAL',
+  'MOVIES | CINEMA & HBO',
+  'KIDS | ANIMATION & CARTOONS',
+  'DOCUMENTARY & SCIENCE',
+  'MUSIC & CONCERTS',
+  '4K | ULTRA HD MASTER FEEDS',
 ];
 
 const SOURCES_INIT: IptvSource[] = [
@@ -334,10 +354,15 @@ export class UnifiedIptvEngine {
       if (chData.channels && Array.isArray(chData.channels) && chData.channels.length > 0) {
         const mappedRealChannels: UnifiedChannel[] = chData.channels.map((c: any, idx: number) => {
           const streamId = c.streamId || c.stream_id || c.id;
-          const liveM3u8Url = c.streamUrl || `/api/stream/live/${streamId}.m3u8`;
-          const liveTsUrl = c.tsStreamUrl || `/api/stream/live/${streamId}.ts`;
+          const rawUrl = c.rawStreamUrl || c.resolved_stream_url || c.directUrl || '';
+          const directProxyUrl = rawUrl
+            ? `/api/stream/proxy?url=${encodeURIComponent(rawUrl)}`
+            : (c.streamUrl || `/api/stream/live/${streamId}.m3u8`);
+          const liveTsUrl = rawUrl
+            ? `/api/stream/proxy?url=${encodeURIComponent(rawUrl)}`
+            : (c.tsStreamUrl || `/api/stream/live/${streamId}.ts`);
           const cat = c.categoryName || c.category_name || 'General';
-          const srcId = c.sourceId || c.source_id || (this.state.sources[0]?.id || 'src-xtream-01');
+          const srcId = c.sourceId || c.source_id || (this.state.sources[0]?.id || 'src_m3u_eng');
           const chId = c.id && String(c.id).includes('_') ? String(c.id) : `${srcId}_${streamId}`;
           const isFav = this.favoritesSet.has(chId) || this.favoritesSet.has(String(streamId));
 
@@ -355,9 +380,9 @@ export class UnifiedIptvEngine {
             sourceId: srcId,
             sourceName: c.sourceName || this.state.sources.find((s) => s.id === srcId)?.name || 'M3U Broadcast Master',
             logoUrl: c.streamIcon || c.stream_icon || c.logoUrl || null,
-            streamUrl: liveM3u8Url,
-            rawStreamUrl: c.rawStreamUrl || c.resolved_stream_url || c.directUrl || '',
-            directSourceUrl: c.rawStreamUrl || c.resolved_stream_url || c.directUrl || '',
+            streamUrl: directProxyUrl,
+            rawStreamUrl: rawUrl,
+            directSourceUrl: rawUrl,
             alternativeStreamUrls: [liveTsUrl],
             activeStreamIndex: 0,
             isFailoverActive: false,
@@ -482,7 +507,77 @@ export class UnifiedIptvEngine {
 
     const KIDS_NAMES = [
       'Disney Channel HD', 'Disney Junior Live', 'Cartoon Network UK', 'Boomerang Classic', 'Nickelodeon HD',
-      'Nick Jr English', 'CBBC HD', 'CBeebies UK', 'Pop Max', 'Baby TV HD'
+      'Nick Jr English', 'CBBC HD', 'CBeebies UK', 'Pop Max Kids', 'Baby TV HD', 'PBS Kids USA', 'Cartoonito HD'
+    ];
+
+    const AFRICA_NAMES = [
+      'SuperSport Grandstand HD', 'Channels Television Nigeria', 'NTA News 24 Network', 'SABC 1 South Africa',
+      'Citizen TV Kenya', 'AfricaNews HD', 'KBC 1 Direct', 'Joy News Ghana', 'Ebonylife TV Pan-Africa', 'Silverbird TV'
+    ];
+
+    const ASIA_NAMES = [
+      'NHK World Japan 4K', 'Sony SAB India HD', 'Star Plus HD Asia', 'CCTV 4 Global', 'KBS World Korea',
+      'Zee Cinema HD', 'Arirang TV Korea', 'Colors TV International', 'TV Tokyo Global', 'WION South Asia'
+    ];
+
+    const EUROPE_NAMES = [
+      'TF1 HD France', 'ZDF HD Germany', 'RTL Television HD', 'RAI 1 Italia', 'Antena 3 Spain',
+      'Canal+ France 4K', 'ARD Das Erste', 'France 2 UHD', 'RTVE La 1 Spain', 'Mediaset Italia HD'
+    ];
+
+    const SWEDEN_TELIAPLAY_NAMES = [
+      'TeliaPlay Live Events 1 FHD', 'TeliaPlay Live Events 2 HD', 'TeliaPlay Sportkanalen 4K', 'TeliaPlay Allsvenskan Live',
+      'TeliaPlay SHL Hockey HD', 'TeliaPlay Motor Live', 'TeliaPlay Tennis Open', 'TeliaPlay Event Special'
+    ];
+
+    const SWEDEN_VIAPLAY_NAMES = [
+      'ViaPlay Live Events 1 HD', 'ViaPlay Premier League 4K', 'ViaPlay Formula 1 HD', 'ViaPlay Fighting HD',
+      'ViaPlay Golf UHD', 'ViaPlay Vinterstudio', 'ViaPlay Series Live', 'ViaPlay Sport Extra'
+    ];
+
+    const SWEDEN_MAX_SPORTS_NAMES = [
+      'max sports 1 HD Sweden', 'max sports 2 FHD', 'max sports Allsvenskan 1', 'max sports Tennis Live',
+      'max sports Padel Tour', 'max sports Cykling Live', 'max sports Vinter HD'
+    ];
+
+    const SWEDEN_EXPRESSEN_NAMES = [
+      'Expressen Play Nyheter HD', 'Expressen Play Live Direkt', 'Expressen Play Sport 1', 'Expressen Play Debatt & Krim',
+      'Expressen Play Dokumentär'
+    ];
+
+    const SWEDEN_DISNEY_NAMES = [
+      'Disney+ Live Stream Sweden', 'Disney Channel Nordic HD', 'Disney Junior Sverige', 'Disney XD Classic',
+      'Disney+ National Geographic'
+    ];
+
+    const SWEDEN_TV4_NAMES = [
+      'TV4 Play Events 1 HD', 'TV4 Play Events 2 Live', 'TV4 Play Sportkanalen', 'TV4 Play Fotboll Direkt',
+      'TV4 Play Nyheterna 24/7'
+    ];
+
+    const SWEDEN_GENERAL_NAMES = [
+      'SVT 1 HD Sverige', 'SVT 2 HD Sverige', 'TV3 Sverige HD', 'TV4 HD Sverige', 'Kanal 5 HD',
+      'TV6 Sverige FHD', 'Sjuan Sverige HD', 'TV12 Sport HD', 'SVT Barnkanalen', 'SVT 24 HD'
+    ];
+
+    const BELGIUM_NAMES = [
+      'RTBF La Une HD', 'RTBF La Deux', 'VRT 1 HD Belgium', 'VRT Canvas HD', 'Play4 Belgium',
+      'Play5 HD', 'Play6 Action', 'Tipik Live HD', 'RTL-TVI Belgium', 'Club RTL HD'
+    ];
+
+    const CANADA_LOCAL_NAMES = [
+      'CBC Toronto HD', 'CTV News Channel Canada', 'Global News Toronto', 'Citytv Toronto HD',
+      'CP24 Toronto Live News', 'CBC Montreal HD', 'CTV Atlantic Live', 'Global Vancouver HD'
+    ];
+
+    const CANADA_ENTERTAINMENT_NAMES = [
+      'TSN 1 Sports Canada HD', 'TSN 2 Sports HD', 'Sportsnet National 4K', 'Sportsnet Ontario HD',
+      'Crave 1 Canada HD', 'Showcase Canada HD', 'HGTV Canada HD', 'History Canada HD', 'W Network Canada'
+    ];
+
+    const NORWAY_NAMES = [
+      'TV2 Sport 1 HD Norge', 'TV2 Sport 2 HD', 'TV2 Sport Premium FHD', 'NRK 1 HD Norge', 'NRK 2 HD',
+      'NRK Sport Direkte', 'VG+ Sport Live 1', 'VG+ Sport Live 2', 'Viaplay Sport Norge 1', 'Viaplay Vinter HD'
     ];
 
     const MUSIC_NAMES = [
@@ -511,22 +606,74 @@ export class UnifiedIptvEngine {
       const source = SOURCES_INIT[sourceIndex];
 
       let baseName = '';
-      if (category.includes('Sports')) {
+      let progRating = 'TV-14';
+
+      if (category.includes('TeliaPlay')) {
+        baseName = SWEDEN_TELIAPLAY_NAMES[i % SWEDEN_TELIAPLAY_NAMES.length];
+        progRating = 'TV-PG';
+      } else if (category.includes('ViaPlay')) {
+        baseName = SWEDEN_VIAPLAY_NAMES[i % SWEDEN_VIAPLAY_NAMES.length];
+        progRating = 'TV-PG';
+      } else if (category.includes('max sports')) {
+        baseName = SWEDEN_MAX_SPORTS_NAMES[i % SWEDEN_MAX_SPORTS_NAMES.length];
+        progRating = 'TV-PG';
+      } else if (category.includes('Expressen')) {
+        baseName = SWEDEN_EXPRESSEN_NAMES[i % SWEDEN_EXPRESSEN_NAMES.length];
+        progRating = 'TV-PG';
+      } else if (category.includes('Disney+')) {
+        baseName = SWEDEN_DISNEY_NAMES[i % SWEDEN_DISNEY_NAMES.length];
+        progRating = 'TV-G';
+      } else if (category.includes('TV4 Play')) {
+        baseName = SWEDEN_TV4_NAMES[i % SWEDEN_TV4_NAMES.length];
+        progRating = 'TV-PG';
+      } else if (category === 'Sweden') {
+        baseName = SWEDEN_GENERAL_NAMES[i % SWEDEN_GENERAL_NAMES.length];
+        progRating = 'TV-PG';
+      } else if (category === 'Belgium') {
+        baseName = BELGIUM_NAMES[i % BELGIUM_NAMES.length];
+        progRating = 'TV-PG';
+      } else if (category.includes('Canada') && category.includes('Local')) {
+        baseName = CANADA_LOCAL_NAMES[i % CANADA_LOCAL_NAMES.length];
+        progRating = 'TV-PG';
+      } else if (category.includes('Canada')) {
+        baseName = CANADA_ENTERTAINMENT_NAMES[i % CANADA_ENTERTAINMENT_NAMES.length];
+        progRating = 'TV-PG';
+      } else if (category.includes('Norway')) {
+        baseName = NORWAY_NAMES[i % NORWAY_NAMES.length];
+        progRating = 'TV-PG';
+      } else if (category.includes('Sports')) {
         baseName = SPORTS_NAMES[i % SPORTS_NAMES.length];
+        progRating = 'TV-PG';
       } else if (category.includes('News')) {
         baseName = NEWS_NAMES[i % NEWS_NAMES.length];
+        progRating = 'TV-PG';
       } else if (category.includes('Movies')) {
         baseName = MOVIE_NAMES[i % MOVIE_NAMES.length];
+        progRating = i % 3 === 0 ? 'TV-14' : i % 3 === 1 ? 'TV-MA' : 'PG-13';
       } else if (category.includes('Entertainment')) {
         baseName = ENTERTAINMENT_NAMES[i % ENTERTAINMENT_NAMES.length];
+        progRating = i % 2 === 0 ? 'TV-PG' : 'TV-14';
       } else if (category.includes('Documentary')) {
         baseName = DOCS_NAMES[i % DOCS_NAMES.length];
+        progRating = 'TV-G';
       } else if (category.includes('Kids')) {
         baseName = KIDS_NAMES[i % KIDS_NAMES.length];
+        progRating = i % 3 === 0 ? 'TV-Y' : i % 3 === 1 ? 'TV-G' : 'TV-PG';
+      } else if (category.includes('AFRICA')) {
+        baseName = AFRICA_NAMES[i % AFRICA_NAMES.length];
+        progRating = 'TV-PG';
+      } else if (category.includes('ASIA')) {
+        baseName = ASIA_NAMES[i % ASIA_NAMES.length];
+        progRating = 'TV-PG';
+      } else if (category.includes('EUROPE')) {
+        baseName = EUROPE_NAMES[i % EUROPE_NAMES.length];
+        progRating = 'TV-PG';
       } else if (category.includes('Music')) {
         baseName = MUSIC_NAMES[i % MUSIC_NAMES.length];
+        progRating = 'TV-PG';
       } else {
         baseName = `Global Channel ${category} Feed`;
+        progRating = 'TV-PG';
       }
 
       const channelName = i <= 200 ? `${baseName} [CH ${i}]` : `${baseName} ${Math.floor(i / 100) + 1}`;
@@ -548,7 +695,7 @@ export class UnifiedIptvEngine {
         endTs,
         durationMins: 90,
         category,
-        rating: 'TV-14',
+        rating: progRating,
       };
 
       const epgNext: EpgProgramItem = {
@@ -562,7 +709,7 @@ export class UnifiedIptvEngine {
         endTs: nextEndTs,
         durationMins: 60,
         category,
-        rating: 'TV-PG',
+        rating: progRating,
       };
 
       const resTypes: UnifiedChannel['resolution'][] = ['4K UHD', '1080p60', '720p60', '1080i'];
@@ -574,62 +721,56 @@ export class UnifiedIptvEngine {
 
       const CATEGORY_STREAM_FEEDS: Record<string, string[]> = {
         Sports: [
-          'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
-          'https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8',
           'https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8',
-          'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-          'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
+          'https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8',
+          'https://playertest.longtailvideo.com/adaptive/oceans/oceans.m3u8',
+          'https://raw.githubusercontent.com/bower-media-samples/big-buck-bunny-1080p-60fps-30s/master/video.mp4',
         ],
         'News & Politics': [
           'https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8',
-          'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
           'https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8',
-          'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
+          'https://playertest.longtailvideo.com/adaptive/oceans/oceans.m3u8',
         ],
         'Movies & Cinema': [
           'https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8',
-          'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
-          'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
-          'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
+          'https://playertest.longtailvideo.com/adaptive/oceans/oceans.m3u8',
+          'https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8',
+          'https://raw.githubusercontent.com/bower-media-samples/big-buck-bunny-1080p-60fps-30s/master/video.mp4',
         ],
         Entertainment: [
-          'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
           'https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8',
           'https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8',
-          'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+          'https://playertest.longtailvideo.com/adaptive/oceans/oceans.m3u8',
         ],
         'Documentary & Science': [
           'https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8',
           'https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8',
-          'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
-          'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
+          'https://playertest.longtailvideo.com/adaptive/oceans/oceans.m3u8',
         ],
         'Kids & Animation': [
-          'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
-          'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+          'https://raw.githubusercontent.com/bower-media-samples/big-buck-bunny-1080p-60fps-30s/master/video.mp4',
           'https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8',
-          'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
+          'https://playertest.longtailvideo.com/adaptive/oceans/oceans.m3u8',
         ],
         'Music & Concerts': [
           'https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8',
-          'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
           'https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8',
-          'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
+          'https://playertest.longtailvideo.com/adaptive/oceans/oceans.m3u8',
         ],
         'International Live': [
-          'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
           'https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8',
           'https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8',
+          'https://playertest.longtailvideo.com/adaptive/oceans/oceans.m3u8',
         ],
         '4K UHD Master Feeds': [
-          'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
           'https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8',
           'https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8',
+          'https://playertest.longtailvideo.com/adaptive/oceans/oceans.m3u8',
         ],
         'Regional Broadcasts': [
-          'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
           'https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8',
           'https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8',
+          'https://playertest.longtailvideo.com/adaptive/oceans/oceans.m3u8',
         ],
       };
 
@@ -868,6 +1009,15 @@ export class UnifiedIptvEngine {
 
     // Trigger progressive background hydration
     this.hydrateFromSource(srcId, name, customCount, url, type);
+  }
+
+  public removeSource(sourceId: string): void {
+    this.state.sources = this.state.sources.filter((s) => s.id !== sourceId);
+    this.channels = this.channels.filter((c) => c.sourceId !== sourceId);
+    this.state.totalChannelCount = this.channels.length;
+    this.state.filteredChannelCount = this.channels.length;
+    this.saveSourcesToStorage();
+    this.notify();
   }
 
   public async startProgressiveIngestion(
@@ -1276,6 +1426,26 @@ export class UnifiedIptvEngine {
     return this.favoritesSet.has(channelId);
   }
 
+  public getFavorites(): string[] {
+    return Array.from(this.favoritesSet);
+  }
+
+  public addFavorite(channelId: string): void {
+    this.favoritesSet.add(channelId);
+    const ch = this.channels.find((c) => c.id === channelId);
+    if (ch) ch.isFavorite = true;
+    this.saveFavoritesToStorage();
+    this.notify();
+  }
+
+  public removeFavorite(channelId: string): void {
+    this.favoritesSet.delete(channelId);
+    const ch = this.channels.find((c) => c.id === channelId);
+    if (ch) ch.isFavorite = false;
+    this.saveFavoritesToStorage();
+    this.notify();
+  }
+
   public getRecentChannels(): UnifiedChannel[] {
     if (this.recentWatchedList.length > 0) {
       const map = new Map(this.channels.map((c) => [c.id, c]));
@@ -1287,6 +1457,7 @@ export class UnifiedIptvEngine {
   }
 
   public recordChannelWatch(channelId: string): void {
+    if (this.recentWatchedList[0] === channelId) return;
     this.recentWatchedList = [
       channelId,
       ...this.recentWatchedList.filter((id) => id !== channelId),

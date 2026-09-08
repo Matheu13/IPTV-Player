@@ -24,6 +24,8 @@ export * from './components/MultiViewMatrix';
 export * from './components/QuickZapOverlay';
 export * from './components/DesignSystemShowcase';
 export * from './components/NavigationRail';
+export * from './components/TvLokLiveInterface';
+export * from './components/CinematicShell';
 export * from './components/AppShell';
 export * from './screens/HomeScreen';
 export * from './screens/LiveTVScreen';

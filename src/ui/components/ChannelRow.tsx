@@ -33,6 +33,7 @@ export interface ChannelRowData {
   is8k?: boolean;
   is4k?: boolean;
   isFavorite?: boolean;
+  alternativeStreamUrls?: string[];
 }
 
 interface ChannelRowProps {

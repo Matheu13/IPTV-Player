@@ -27,17 +27,17 @@ export const UI_THEME = {
     surfaceGlass: 'rgba(17, 23, 34, 0.88)',
     surfaceGlassElevated: 'rgba(30, 41, 59, 0.92)',
 
-    // Accents & Signals
-    accentPrimary: '#38bdf8', // Sky 400
-    accentSecondary: '#6366f1', // Indigo 500
-    accentHover: '#0ea5e9',
-    focusRing: '#38bdf8',
-    focusGlow: 'rgba(56, 189, 248, 0.40)',
+    // Accents & Signals (TVLok High-Contrast Green)
+    accentPrimary: '#22c55e', // High-contrast green 500
+    accentSecondary: '#10b981', // Emerald 500
+    accentHover: '#16a34a',
+    focusRing: '#22c55e',
+    focusGlow: 'rgba(34, 197, 94, 0.45)',
 
     // Status & Semantic
-    liveBadge: '#ef4444',
-    liveGlow: 'rgba(239, 68, 68, 0.35)',
-    success: '#10b981',
+    liveBadge: '#22c55e',
+    liveGlow: 'rgba(34, 197, 94, 0.40)',
+    success: '#22c55e',
     warning: '#f59e0b',
     error: '#f43f5e',
 
@@ -50,7 +50,7 @@ export const UI_THEME = {
     // Borders & Dividers
     borderSubtle: 'rgba(255, 255, 255, 0.06)',
     borderMedium: 'rgba(255, 255, 255, 0.12)',
-    borderFocus: '#38bdf8',
+    borderFocus: '#22c55e',
   },
 
   typography: {
@@ -108,7 +108,7 @@ export const UI_THEME = {
     card: 'shadow-md shadow-black/40',
     elevated: 'shadow-xl shadow-black/60',
     glass: 'backdrop-blur-md bg-opacity-90 shadow-2xl shadow-black/70',
-    focusGlow: 'ring-2 ring-sky-400 ring-offset-2 ring-offset-[#080b11] shadow-[0_0_18px_rgba(56,189,248,0.40)]',
+    focusGlow: 'ring-2 ring-emerald-400 ring-offset-2 ring-offset-[#080b11] shadow-[0_0_20px_rgba(34,197,94,0.45)]',
   },
 
   transitions: {

@@ -1,1 +1,82 @@
 @import "tailwindcss";
+
+/* ==========================================================================
+   TVLok Design Reference: Dark Theming & High-Contrast Green Accents
+   ========================================================================== */
+
+:root {
+  --tvlok-bg: #080b11;
+  --tvlok-bg-elevated: #0d131f;
+  --tvlok-surface-card: #141c2b;
+  --tvlok-surface-card-hover: #1b263a;
+  --tvlok-accent: #22c55e;
+  --tvlok-accent-light: #4ade80;
+  --tvlok-accent-glow: rgba(34, 197, 94, 0.45);
+  --tvlok-border: rgba(255, 255, 255, 0.08);
+  --tvlok-border-active: rgba(34, 197, 94, 0.5);
+}
+
+/* TVLok Cinematic Shell Container */
+.cinematic-shell {
+  background-color: var(--tvlok-bg);
+  color: #f8fafc;
+}
+
+/* TVLok Rounded Cards */
+.tvlok-card {
+  background-color: var(--tvlok-surface-card);
+  border: 1px solid var(--tvlok-border);
+  border-radius: 1rem; /* 16px rounded-2xl */
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.5);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+              background-color 0.2s ease,
+              border-color 0.2s ease,
+              box-shadow 0.2s ease;
+}
+
+.tvlok-card:hover {
+  background-color: var(--tvlok-surface-card-hover);
+  border-color: var(--tvlok-border-active);
+  box-shadow: 0 8px 30px -4px rgba(0, 0, 0, 0.7),
+              0 0 16px rgba(34, 197, 94, 0.2);
+  transform: translateY(-2px);
+}
+
+/* Remote Control Navigation Focus States */
+.cinematic-shell :focus-visible,
+.cinematic-shell [data-focused="true"],
+.tvlok-card:focus-visible,
+.tvlok-focus {
+  outline: none !important;
+  box-shadow: 0 0 0 2px var(--tvlok-accent),
+              0 0 24px var(--tvlok-accent-glow) !important;
+  transform: scale(1.02);
+  z-index: 10;
+}
+
+/* High-contrast green glowing pills & badges */
+.tvlok-badge-live {
+  background-color: rgba(34, 197, 94, 0.18);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.4);
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.25);
+}
+
+/* Custom Leanback 10-Foot Scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(8, 11, 17, 0.6);
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 9999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(34, 197, 94, 0.5);
+}

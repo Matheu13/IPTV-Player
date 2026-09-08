@@ -75,7 +75,7 @@ export const NavigationRail: React.FC<NavigationRailProps> = ({
     return (
       <nav
         aria-label="Mobile Navigation"
-        className={`fixed bottom-0 left-0 right-0 h-16 bg-[#0c1018]/95 backdrop-blur-lg border-t border-white/10 flex items-center justify-around px-2 z-40 ${className}`}
+        className={`fixed bottom-0 left-0 right-0 h-16 bg-[#080b11]/95 backdrop-blur-lg border-t border-white/10 flex items-center justify-around px-2 z-40 ${className}`}
       >
         {filteredItems.map((item) => {
           const Icon = item.icon;
@@ -84,11 +84,11 @@ export const NavigationRail: React.FC<NavigationRailProps> = ({
             <button
               key={item.id}
               onClick={() => onSelectTab(item.id)}
-              className={`flex flex-col items-center justify-center w-14 h-12 rounded-lg transition-colors ${
-                isActive ? 'text-sky-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+              className={`flex flex-col items-center justify-center w-14 h-12 rounded-xl transition-colors ${
+                isActive ? 'text-emerald-400 font-bold' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              <Icon className={`w-5 h-5 ${isActive ? 'stroke-[2.5px]' : 'stroke-2'}`} />
+              <Icon className={`w-5 h-5 ${isActive ? 'stroke-[2.5px] text-emerald-400' : 'stroke-2'}`} />
               <span className="text-[10px] mt-1 leading-none tracking-tight">{item.label}</span>
             </button>
           );
@@ -102,11 +102,11 @@ export const NavigationRail: React.FC<NavigationRailProps> = ({
     return (
       <nav
         aria-label="TV Main Navigation"
-        className={`flex items-center gap-2 p-3 bg-[#0d121c]/90 backdrop-blur-md border-b border-white/10 z-30 ${className}`}
+        className={`flex items-center gap-2 p-3 bg-[#080b11]/95 backdrop-blur-md border-b border-white/10 z-30 ${className}`}
       >
-        <div className="flex items-center gap-2 px-3 py-1 bg-sky-500/10 border border-sky-500/30 rounded-lg text-sky-400 font-extrabold text-sm tracking-wider mr-4">
-          <Tv className="w-4 h-4" />
-          <span>IPTV OS</span>
+        <div className="flex items-center gap-2 px-3 py-1 bg-emerald-500/15 border border-emerald-500/30 rounded-xl text-emerald-400 font-extrabold text-sm tracking-wider mr-4 shadow-sm shadow-emerald-500/25">
+          <Tv className="w-4 h-4 text-emerald-400" />
+          <span>TvLok Live</span>
         </div>
 
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
@@ -123,7 +123,7 @@ export const NavigationRail: React.FC<NavigationRailProps> = ({
                 onSelect={() => onSelectTab(item.id)}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
                   isActive
-                    ? 'bg-sky-500 text-white shadow-lg shadow-sky-500/30 font-bold'
+                    ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/30 font-bold'
                     : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
                 }`}
               >
@@ -141,27 +141,29 @@ export const NavigationRail: React.FC<NavigationRailProps> = ({
   return (
     <aside
       aria-label="Sidebar Navigation"
-      className={`h-full bg-[#0c1018] border-r border-white/5 flex flex-col justify-between transition-all duration-300 z-30 ${
+      className={`h-full bg-[#080b11] border-r border-white/5 flex flex-col justify-between transition-all duration-300 z-30 ${
         isCollapsed ? 'w-16' : 'w-56'
       } ${className}`}
     >
       {/* App Branding & Collapse Toggle */}
-      <div className="p-3.5 border-b border-white/5 flex items-center justify-between">
+      <div className="p-3.5 border-b border-white/5 flex items-center justify-between bg-[#0e1420]">
         {!isCollapsed && (
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-sky-950">
-              <Tv className="w-4 h-4" />
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-md shadow-emerald-500/25">
+              <Tv className="w-4 h-4 stroke-[2.5px] text-emerald-400" />
             </div>
             <div>
-              <div className="font-extrabold text-sm tracking-tight text-white">IPTV PLAYER</div>
-              <div className="text-[10px] font-mono text-sky-400/90 font-medium">8K • D3D11 • STALKER</div>
+              <div className="font-black text-sm tracking-tight text-white">
+                Tv<span className="text-emerald-400">Lok</span>
+              </div>
+              <div className="text-[10px] font-mono text-emerald-400/80 font-medium">LIVE • EPG • M3U</div>
             </div>
           </div>
         )}
 
         {isCollapsed && (
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-sky-950 mx-auto">
-            <Tv className="w-4 h-4" />
+          <div className="w-8 h-8 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-md shadow-emerald-500/25 mx-auto">
+            <Tv className="w-4 h-4 stroke-[2.5px] text-emerald-400" />
           </div>
         )}
 
@@ -177,7 +179,7 @@ export const NavigationRail: React.FC<NavigationRailProps> = ({
       </div>
 
       {/* Main Nav Items */}
-      <div className="flex-1 py-3 px-2 space-y-1 overflow-y-auto">
+      <div className="flex-1 py-3 px-2 space-y-1 overflow-y-auto custom-scrollbar">
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
@@ -189,16 +191,16 @@ export const NavigationRail: React.FC<NavigationRailProps> = ({
               id={`nav-item-${item.id}`}
               isFocused={isFocused}
               onSelect={() => onSelectTab(item.id)}
-              className={`group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+              className={`group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
                 isActive
-                  ? 'bg-sky-500/15 text-sky-300 border border-sky-500/30 font-semibold shadow-sm'
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold shadow-[0_0_15px_rgba(34,197,94,0.25)]'
                   : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 border border-transparent'
               }`}
               title={isCollapsed ? item.label : undefined}
             >
               <Icon
                 className={`w-5 h-5 shrink-0 transition-transform group-hover:scale-110 ${
-                  isActive ? 'text-sky-400 stroke-[2.5px]' : 'text-slate-400 group-hover:text-slate-200'
+                  isActive ? 'text-emerald-400 stroke-[2.5px]' : 'text-slate-400 group-hover:text-slate-200'
                 }`}
               />
 

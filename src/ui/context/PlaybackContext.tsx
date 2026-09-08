@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { ChannelRowData } from '../components/ChannelRow';
 import { globalUnifiedIptvEngine } from '../../lib/unifiedIptvEngine';
 
@@ -74,7 +74,7 @@ export const PlaybackProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     },
   });
 
-  const playChannel = (channel: ChannelRowData, initialMode: PlayerPresentationMode = 'embedded') => {
+  const playChannel = useCallback((channel: ChannelRowData, initialMode: PlayerPresentationMode = 'embedded') => {
     setState((prev) => ({
       ...prev,
       currentChannel: channel,
@@ -103,9 +103,9 @@ export const PlaybackProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         isBuffering: false,
       }));
     }, 280);
-  };
+  }, []);
 
-  const stopPlayback = () => {
+  const stopPlayback = useCallback(() => {
     setState((prev) => ({
       ...prev,
       isPlaying: false,
@@ -113,22 +113,22 @@ export const PlaybackProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       currentChannel: null,
       presentationMode: 'hidden',
     }));
-  };
+  }, []);
 
-  const setPresentationMode = (mode: PlayerPresentationMode) => {
+  const setPresentationMode = useCallback((mode: PlayerPresentationMode) => {
     setState((prev) => ({ ...prev, presentationMode: mode }));
-  };
+  }, []);
 
-  const togglePlayPause = () => {
+  const togglePlayPause = useCallback(() => {
     setState((prev) => ({ ...prev, isPlaying: !prev.isPlaying }));
-  };
+  }, []);
 
-  const setVolume = (vol: number) => {
+  const setVolume = useCallback((vol: number) => {
     const clamped = Math.max(0, Math.min(100, vol));
     setState((prev) => ({ ...prev, volume: clamped, isMuted: clamped === 0 }));
-  };
+  }, []);
 
-  const toggleMute = () => {
+  const toggleMute = useCallback(() => {
     setState((prev) => {
       const willMute = !prev.isMuted;
       return {
@@ -137,35 +137,46 @@ export const PlaybackProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         volume: willMute ? prev.volume : (prev.volume === 0 ? 80 : prev.volume),
       };
     });
-  };
+  }, []);
 
-  const setQuality = (quality: 'auto' | '1080p' | '720p' | '480p' | '4k') => {
+  const setQuality = useCallback((quality: 'auto' | '1080p' | '720p' | '480p' | '4k') => {
     setState((prev) => ({ ...prev, quality }));
-  };
+  }, []);
 
-  const setAudioTrack = (trackId: string) => {
+  const setAudioTrack = useCallback((trackId: string) => {
     setState((prev) => ({ ...prev, activeAudioTrack: trackId }));
-  };
+  }, []);
 
-  const setSubtitleTrack = (trackId: string) => {
+  const setSubtitleTrack = useCallback((trackId: string) => {
     setState((prev) => ({ ...prev, activeSubtitleTrack: trackId }));
-  };
+  }, []);
+
+  const contextValue = useMemo(() => ({
+    state,
+    playChannel,
+    stopPlayback,
+    setPresentationMode,
+    togglePlayPause,
+    setVolume,
+    toggleMute,
+    setQuality,
+    setAudioTrack,
+    setSubtitleTrack,
+  }), [
+    state,
+    playChannel,
+    stopPlayback,
+    setPresentationMode,
+    togglePlayPause,
+    setVolume,
+    toggleMute,
+    setQuality,
+    setAudioTrack,
+    setSubtitleTrack,
+  ]);
 
   return (
-    <PlaybackContext.Provider
-      value={{
-        state,
-        playChannel,
-        stopPlayback,
-        setPresentationMode,
-        togglePlayPause,
-        setVolume,
-        toggleMute,
-        setQuality,
-        setAudioTrack,
-        setSubtitleTrack,
-      }}
-    >
+    <PlaybackContext.Provider value={contextValue}>
       {children}
     </PlaybackContext.Provider>
   );

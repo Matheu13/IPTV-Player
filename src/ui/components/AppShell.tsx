@@ -12,19 +12,22 @@ import { AdvancedDiagnosticsPanel } from '../../components/AdvancedDiagnosticsPa
 import { DesignSystemShowcase } from './DesignSystemShowcase';
 import { VideoPlayerShell } from './VideoPlayerShell';
 import { PlaybackProvider, usePlayback } from '../context/PlaybackContext';
+import { ProfileProvider, useProfile } from '../context/ProfileContext';
+import { WhoIsWatchingScreen } from '../screens/WhoIsWatchingScreen';
 import { ChannelRowData } from './ChannelRow';
 import { ProviderSwitcher } from './ProviderSwitcher';
 import { SourceManagementModal } from '../../components/SourceManagementModal';
 import { globalUnifiedIptvEngine } from '../../lib/unifiedIptvEngine';
 
 const AppShellContent: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<NavTabId>('home');
+  const [activeTab, setActiveTab] = useState<NavTabId>('live');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isTvMode, setIsTvMode] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [isSourceModalOpen, setIsSourceModalOpen] = useState(false);
 
   const { playChannel, state: playbackState } = usePlayback();
+  const { isWhoIsWatchingOpen, currentProfile, isKidsMode, openWhoIsWatching } = useProfile();
 
   // Detect Mobile / TV Viewport
   useEffect(() => {
@@ -131,40 +134,60 @@ const AppShellContent: React.FC = () => {
 
       {/* 2. Main Content Viewport */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative pb-16 md:pb-0">
-        {/* Top App Header with Global Provider Switcher */}
-        <header className="h-12 bg-[#090d16]/90 backdrop-blur-md border-b border-white/5 px-4 flex items-center justify-between shrink-0 z-20">
-          <div className="flex items-center gap-3">
-            <span className="text-xs uppercase tracking-wider font-extrabold text-slate-400">
-              {activeTab === 'home'
-                ? 'Overview'
-                : activeTab === 'live'
-                ? 'Live Channels'
-                : activeTab === 'epg'
-                ? 'Electronic Program Guide'
-                : activeTab === 'movies'
-                ? 'VOD Cinema'
-                : activeTab === 'series'
-                ? 'TV Shows'
-                : activeTab === 'favorites'
-                ? 'Pinned Favorites'
-                : activeTab === 'search'
-                ? 'Universal Index'
-                : activeTab === 'settings'
-                ? 'System Settings'
-                : 'Diagnostics'}
-            </span>
-          </div>
+        {/* Top App Header with Global Provider Switcher (Hidden on Live TV which has dedicated TV guide header) */}
+        {activeTab !== 'live' && (
+          <header className="h-12 bg-[#090d16]/90 backdrop-blur-md border-b border-white/5 px-4 flex items-center justify-between shrink-0 z-20">
+            <div className="flex items-center gap-3">
+              <span className="text-xs uppercase tracking-wider font-extrabold text-slate-400">
+                {activeTab === 'home'
+                  ? 'Overview'
+                  : activeTab === 'epg'
+                  ? 'Electronic Program Guide'
+                  : activeTab === 'movies'
+                  ? 'VOD Cinema'
+                  : activeTab === 'series'
+                  ? 'TV Shows'
+                  : activeTab === 'favorites'
+                  ? 'Pinned Favorites'
+                  : activeTab === 'search'
+                  ? 'Universal Index'
+                  : activeTab === 'settings'
+                  ? 'System Settings'
+                  : 'Diagnostics'}
+              </span>
+            </div>
 
-          <div className="flex items-center gap-3">
-            <ProviderSwitcher
-              variant="pill"
-              onOpenSourceManager={() => setIsSourceModalOpen(true)}
-              onProviderSwitched={(sourceId, sourceName) => {
-                // If on Live TV, it will automatically update filtered channels
-              }}
-            />
-          </div>
-        </header>
+            <div className="flex items-center gap-3">
+              {/* Active Profile Pill / Switcher */}
+              <button
+                onClick={openWhoIsWatching}
+                className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-[#101726] hover:bg-white/[0.08] border border-white/10 text-xs font-medium text-slate-200 transition-all cursor-pointer"
+                title="Switch Profile / Who Is Watching"
+              >
+                <div
+                  className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white uppercase shadow-sm"
+                  style={{ backgroundColor: currentProfile.avatarBg || '#2563eb' }}
+                >
+                  {currentProfile.name.charAt(0)}
+                </div>
+                <span className="hidden sm:inline font-semibold">{currentProfile.name}</span>
+                {isKidsMode && (
+                  <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-500/25 text-emerald-300 font-bold">
+                    KIDS
+                  </span>
+                )}
+              </button>
+
+              <ProviderSwitcher
+                variant="pill"
+                onOpenSourceManager={() => setIsSourceModalOpen(true)}
+                onProviderSwitched={(sourceId, sourceName) => {
+                  // If on Live TV, it will automatically update filtered channels
+                }}
+              />
+            </div>
+          </header>
+        )}
 
         {/* Navigation / Screen Switcher */}
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
@@ -181,6 +204,7 @@ const AppShellContent: React.FC = () => {
             <LiveTVScreen
               onSelectChannel={handleSelectChannel}
               isTvMode={isTvMode}
+              onOpenSourceManager={() => setIsSourceModalOpen(true)}
             />
           )}
 
@@ -215,6 +239,9 @@ const AppShellContent: React.FC = () => {
           onClose={() => setIsSourceModalOpen(false)}
         />
 
+        {/* Global Who Is Watching / Profile Switcher Modal */}
+        {isWhoIsWatchingOpen && <WhoIsWatchingScreen />}
+
         {/* Global Persistent Video Player Shell (Handles mini-player / fullscreen across all views) */}
         {playbackState.presentationMode === 'fullscreen' ? (
           <VideoPlayerShell forceMode="fullscreen" />
@@ -235,10 +262,14 @@ const AppShellContent: React.FC = () => {
   );
 };
 
+export { CinematicShell } from './CinematicShell';
+
 export const AppShell: React.FC = () => {
   return (
-    <PlaybackProvider>
-      <AppShellContent />
-    </PlaybackProvider>
+    <ProfileProvider>
+      <PlaybackProvider>
+        <AppShellContent />
+      </PlaybackProvider>
+    </ProfileProvider>
   );
 };

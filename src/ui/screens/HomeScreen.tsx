@@ -6,21 +6,17 @@ import {
   Clapperboard,
   Star,
   Clock,
+  Radio,
   Sparkles,
-  Server,
   ChevronRight,
   TrendingUp,
-  ShieldCheck,
-  Radio,
+  Server,
   CheckCircle2,
 } from 'lucide-react';
-import { GlassPanel } from '../components/GlassPanel';
-import { Focusable } from '../components/Focusable';
-import { SourceBadge } from '../components/SourceBadge';
 import { ChannelRowData } from '../components/ChannelRow';
 import { ProviderSwitcher } from '../components/ProviderSwitcher';
-import { ChannelLogo } from '../components/ChannelLogo';
 import { globalUnifiedIptvEngine } from '../../lib/unifiedIptvEngine';
+import { TvLokTopBar } from '../components/TvLokTopBar';
 
 interface HomeScreenProps {
   onNavigateToLive: () => void;
@@ -36,235 +32,283 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onSelectChannel,
 }) => {
   const [channels, setChannels] = useState<ChannelRowData[]>([]);
-  const [sources, setSources] = useState<any[]>([]);
-  const [recentChannels, setRecentChannels] = useState<ChannelRowData[]>([]);
-  const [favoriteChannels, setFavoriteChannels] = useState<ChannelRowData[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     const updateData = () => {
-      try {
-        const activeSourceId = globalUnifiedIptvEngine.getState().activeSourceId;
-        const allChannels = globalUnifiedIptvEngine.getAllChannels();
-        const filtered = activeSourceId === 'ALL' || activeSourceId === 'all'
-          ? allChannels
-          : allChannels.filter((c: any) => c.sourceId === activeSourceId);
+      const allChannels = globalUnifiedIptvEngine.getAllChannels();
+      const mapped: ChannelRowData[] = allChannels.map((c: any, i) => ({
+        id: c.id,
+        channelNumber: c.channelNumber || i + 1,
+        name: c.name,
+        logo: c.logoUrl || c.logo || undefined,
+        category: c.category,
+        sourceId: c.sourceId,
+        sourceName: c.sourceName,
+        streamUrl: c.streamUrl,
+        nowProgramme: {
+          title: c.epgNow?.title || c.currentEpg?.title || 'Premier League Live',
+          start: '20:00',
+          stop: '22:00',
+          progressPercent: 55,
+        },
+        is4k: c.name.toLowerCase().includes('4k') || c.name.toLowerCase().includes('uhd'),
+        isFavorite: globalUnifiedIptvEngine.isFavorite(c.id),
+      }));
 
-        const all: ChannelRowData[] = filtered.map((c: any, i) => ({
-          id: c.id,
-          channelNumber: c.channelNumber || i + 1,
-          name: c.name,
-          logo: c.logoUrl || c.logo || undefined,
-          category: c.category,
-          sourceId: c.sourceId,
-          sourceName: c.sourceName,
-          streamUrl: c.streamUrl,
-          nowProgramme: {
-            title: c.epgNow?.title || c.currentEpg?.title || 'Live Transmission',
-            start: c.epgNow?.startTime || c.currentEpg?.start || '18:00',
-            stop: c.epgNow?.endTime || c.currentEpg?.stop || '19:00',
-            progressPercent: 35,
-          },
-          is4k: c.name.toLowerCase().includes('4k') || c.resolution === '4K UHD',
-          is8k: c.name.toLowerCase().includes('8k'),
-          isFavorite: globalUnifiedIptvEngine.isFavorite(c.id),
-        }));
-
-        setChannels(all);
-        setRecentChannels(all.slice(0, 6));
-        setFavoriteChannels(all.filter((c) => c.isFavorite).slice(0, 6));
-        setSources(globalUnifiedIptvEngine.getSources());
-      } catch (err) {
-        console.error('Failed to init home screen:', err);
-      }
+      setChannels(mapped);
     };
 
     updateData();
-    const unsubscribe = globalUnifiedIptvEngine.subscribe(updateData);
-    return () => unsubscribe();
+    const unsub = globalUnifiedIptvEngine.subscribe(updateData);
+    return () => unsub();
   }, []);
 
-  const heroChannel = channels[0] || {
-    id: 'hero-1',
-    name: 'Sky Sports Premier League UHD',
+  // Featured Spotlight Channel
+  const heroChannel: ChannelRowData = channels[0] || {
+    id: 'hero-ch',
+    channelNumber: 1,
+    name: 'SuperSport Premier HD',
     category: 'Sports',
-    sourceName: 'Primary Sports CDN',
+    sourceName: 'Broadcast Master CDN',
     nowProgramme: {
-      title: 'Arsenal vs Manchester City - Match of the Season [4K UHD]',
-      start: '18:30',
-      stop: '20:30',
-      progressPercent: 65,
+      title: 'Arsenal vs Liverpool - Premier League Live',
+      start: '20:00',
+      stop: '22:00',
+      progressPercent: 55,
     },
     streamUrl: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
     is4k: true,
   };
 
-  const categories = [
-    { name: 'Sports', icon: Radio, count: '1,420 Streams', color: 'from-amber-500/20 to-orange-500/20' },
-    { name: 'Cinema & Movies', icon: Film, count: '3,850 Titles', color: 'from-sky-500/20 to-blue-500/20' },
-    { name: 'TV Series', icon: Clapperboard, count: '1,200 Shows', color: 'from-indigo-500/20 to-purple-500/20' },
-    { name: 'News & Live', icon: Tv, count: '890 Channels', color: 'from-rose-500/20 to-red-500/20' },
-    { name: 'Documentary', icon: Sparkles, count: '640 Titles', color: 'from-emerald-500/20 to-teal-500/20' },
+  const iptvFavorites = [
+    { name: '★ SuperSport Premier', category: 'Sports', isLive: true },
+    { name: '★ ESPN HD', category: 'Sports', isLive: true },
+    { name: '★ BBC News', category: 'News', isLive: false },
+    { name: '★ Sky Cinema Action', category: 'Movies', isLive: false },
+  ];
+
+  const iptvRecentlyWatched = [
+    'Sky Sports',
+    'Canal+ Sport',
+    'CNN',
+    'Cartoon Network',
+    'beIN Sports 1',
+    'TNT Sports',
   ];
 
   return (
-    <div className="flex-1 bg-[#080b11] text-slate-100 overflow-y-auto p-4 md:p-6 lg:p-8 space-y-6">
-      {/* Provider Quick Switcher Strip */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#0d121c] p-3 rounded-2xl border border-white/5">
-        <div className="flex items-center gap-2">
-          <Server className="w-4 h-4 text-sky-400" />
-          <span className="text-xs font-extrabold uppercase tracking-wider text-slate-300">
-            Active IPTV Provider
-          </span>
-        </div>
-        <ProviderSwitcher variant="tabs" />
-      </div>
+    <div className="flex-1 flex flex-col h-full bg-[#080b11] text-slate-100 overflow-y-auto custom-scrollbar select-none font-sans">
+      {/* 1. Top Bar with Brand, Live Clock (20:45) & Search */}
+      <TvLokTopBar
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        onOpenEpg={onNavigateToLive}
+      />
 
-      {/* Hero Spotlight Banner (Cinematic Command OS) */}
-      <div className="relative rounded-2xl overflow-hidden border border-white/10 bg-gradient-to-r from-sky-950/80 via-[#111722] to-[#0c1018] shadow-2xl p-6 md:p-10 flex flex-col justify-between min-h-[260px]">
-        {/* Subtle background glow */}
-        <div className="absolute top-0 right-0 w-96 h-96 bg-sky-500/10 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="space-y-3 z-10 max-w-2xl">
-          <div className="flex items-center gap-2">
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black tracking-widest text-white bg-rose-600 shadow-lg shadow-rose-950/50 animate-pulse">
-              ● LIVE SPOTLIGHT
-            </span>
-            <span className="px-2 py-0.5 rounded text-[10px] font-black tracking-wider text-amber-300 bg-amber-500/20 border border-amber-500/40">
-              4K UHD 60FPS
-            </span>
-            <SourceBadge sourceName={heroChannel.sourceName || 'Xtream CDN'} size="sm" />
+      <div className="p-4 md:p-8 max-w-7xl mx-auto w-full space-y-8">
+        {/* 2. Primary Navigation Modules */}
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-black uppercase tracking-widest text-emerald-400">
+              Entertainment Hub
+            </h2>
+            <span className="text-xs text-slate-400">Select with remote or click</span>
           </div>
 
-          <h1 className="text-2xl md:text-3xl lg:text-4xl font-extrabold text-white tracking-tight">
-            {heroChannel.nowProgramme?.title}
-          </h1>
-
-          <p className="text-sm text-slate-300 line-clamp-2 leading-relaxed">
-            Live multi-camera broadcast direct from the stadium. Ultra-low latency CMAF pipeline active with zero-copy Direct3D 11 hardware decoding.
-          </p>
-
-          <div className="flex items-center gap-3 pt-2">
-            <button
-              onClick={() => onSelectChannel(heroChannel)}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm text-slate-900 bg-white hover:bg-slate-200 transition-all shadow-xl shadow-white/10 hover:scale-105 active:scale-95"
-            >
-              <Play className="w-4 h-4 fill-current" />
-              <span>Watch Live Now</span>
-            </button>
-
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* 1. Live TV */}
             <button
               onClick={onNavigateToLive}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm text-slate-200 bg-slate-800/80 hover:bg-slate-700 border border-white/10 transition-colors"
+              className="group relative flex flex-col items-center justify-center p-6 md:p-8 rounded-2xl bg-[#141d2c] hover:bg-[#1a2538] border-2 border-emerald-500 shadow-[0_0_28px_rgba(34,197,94,0.3)] transition-all cursor-pointer transform hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:shadow-[0_0_24px_rgba(34,197,94,0.5)] focus:scale-[1.02]"
             >
-              <Tv className="w-4 h-4 text-sky-400" />
-              <span>Browse All Channels</span>
+              <div className="w-16 h-16 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mb-4 shadow-md shadow-emerald-500/25 group-hover:scale-110 transition-transform">
+                <Tv className="w-8 h-8 stroke-[2.5px] text-emerald-400" />
+              </div>
+              <h3 className="text-lg font-black text-emerald-400 tracking-tight">
+                Live TV
+              </h3>
+              <p className="text-xs text-slate-400 mt-1">Live Global Feeds</p>
+              <span className="mt-3 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/30">
+                PRIMARY
+              </span>
+            </button>
+
+            {/* 2. Movies */}
+            <button
+              onClick={onNavigateToMovies}
+              className="group flex flex-col items-center justify-center p-6 md:p-8 rounded-2xl bg-[#141d2c] hover:bg-[#1a2538] border border-white/10 hover:border-emerald-500/40 transition-all cursor-pointer transform hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:shadow-[0_0_24px_rgba(34,197,94,0.5)] focus:scale-[1.02]"
+            >
+              <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-slate-300 mb-4 group-hover:text-emerald-400 group-hover:scale-110 transition-all">
+                <Film className="w-8 h-8" />
+              </div>
+              <h3 className="text-lg font-bold text-white tracking-tight">
+                Movies
+              </h3>
+              <p className="text-xs text-slate-400 mt-1">3,800+ VOD Titles</p>
+            </button>
+
+            {/* 3. Series */}
+            <button
+              onClick={onNavigateToSeries}
+              className="group flex flex-col items-center justify-center p-6 md:p-8 rounded-2xl bg-[#141d2c] hover:bg-[#1a2538] border border-white/10 hover:border-emerald-500/40 transition-all cursor-pointer transform hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:shadow-[0_0_24px_rgba(34,197,94,0.5)] focus:scale-[1.02]"
+            >
+              <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-slate-300 mb-4 group-hover:text-emerald-400 group-hover:scale-110 transition-all">
+                <Clapperboard className="w-8 h-8" />
+              </div>
+              <h3 className="text-lg font-bold text-white tracking-tight">
+                Series
+              </h3>
+              <p className="text-xs text-slate-400 mt-1">1,200+ Box Sets</p>
+            </button>
+
+            {/* 4. Catch Up */}
+            <button
+              onClick={onNavigateToLive}
+              className="group flex flex-col items-center justify-center p-6 md:p-8 rounded-2xl bg-[#141d2c] hover:bg-[#1a2538] border border-white/10 hover:border-emerald-500/40 transition-all cursor-pointer transform hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:shadow-[0_0_24px_rgba(34,197,94,0.5)] focus:scale-[1.02]"
+            >
+              <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-slate-300 mb-4 group-hover:text-emerald-400 group-hover:scale-110 transition-all">
+                <Clock className="w-8 h-8" />
+              </div>
+              <h3 className="text-lg font-bold text-white tracking-tight">
+                Catch Up
+              </h3>
+              <p className="text-xs text-slate-400 mt-1">7-Day EPG Archive</p>
             </button>
           </div>
-        </div>
-      </div>
+        </section>
 
-      {/* Provider Status Summary Strip */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400">
-            <Server className="w-4 h-4 text-sky-400" />
-            <span>Configured IPTV Sources</span>
-          </div>
-          <span className="text-xs font-mono text-slate-400">{sources.length} Active Providers</span>
-        </div>
+        {/* 3. Live Spotlight Banner */}
+        <div className="relative rounded-2xl overflow-hidden border border-emerald-500/30 bg-gradient-to-r from-[#141e2b] via-[#101724] to-[#080d17] p-6 md:p-8 shadow-2xl">
+          <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-          {sources.map((src) => (
-            <GlassPanel key={src.id} className="p-3.5 flex items-center justify-between border-white/5">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-8 h-8 rounded-lg bg-slate-800/90 border border-slate-700 flex items-center justify-center text-sky-400 shrink-0">
-                  <Server className="w-4 h-4" />
-                </div>
-                <div className="min-w-0">
-                  <div className="font-bold text-xs text-white truncate">{src.name}</div>
-                  <div className="text-[10px] font-mono text-slate-400">{src.channelCount} Channels</div>
-                </div>
+          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="space-y-2.5 max-w-2xl">
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black tracking-widest text-slate-950 bg-emerald-400 shadow-md shadow-emerald-500/30">
+                  LIVE MATCH OF THE DAY
+                </span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-white/10 text-white border border-white/10">
+                  20:00 – 22:00
+                </span>
+                <span className="text-xs font-bold text-emerald-400">
+                  {heroChannel.name}
+                </span>
               </div>
-              <div className="flex items-center gap-1 text-[11px] font-medium text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                <CheckCircle2 className="w-3 h-3" />
-                <span>Connected</span>
-              </div>
-            </GlassPanel>
-          ))}
-        </div>
-      </div>
 
-      {/* Continue Watching / Recent Channels */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm font-bold tracking-tight text-white">
-            <Clock className="w-4 h-4 text-sky-400" />
-            <span>Continue Watching &amp; Recents</span>
-          </div>
-          <button
-            onClick={onNavigateToLive}
-            className="text-xs text-sky-400 hover:text-sky-300 font-semibold flex items-center gap-1"
-          >
-            <span>View All</span>
-            <ChevronRight className="w-3 h-3" />
-          </button>
-        </div>
+              <h1 className="text-2xl md:text-3xl font-black text-white tracking-tight">
+                {heroChannel.nowProgramme?.title}
+              </h1>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {recentChannels.map((ch, idx) => (
-            <Focusable
-              key={`home-recent-${ch.id}-${idx}`}
-              id={`home-recent-${ch.id}-${idx}`}
-              onSelect={() => onSelectChannel(ch)}
-              className="p-3.5 rounded-xl bg-[#111722]/80 hover:bg-[#161e2c] border border-white/5 hover:border-sky-500/40 transition-all flex items-center gap-3 group cursor-pointer"
-            >
-              <div className="w-10 h-10 rounded-lg bg-slate-900 flex items-center justify-center shrink-0">
-                <ChannelLogo
-                  name={ch.name}
-                  logoUrl={ch.logo}
-                  category={ch.category}
-                  size="md"
-                  showBadgeBorder={true}
-                />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="font-bold text-sm text-white truncate group-hover:text-sky-300">
-                  {ch.name}
+              <p className="text-xs md:text-sm text-slate-300 leading-relaxed">
+                Live from Anfield. High-definition transmission with immersive audio, instant tactical telemetry, and zero buffering.
+              </p>
+
+              {/* Progress Timeline (55%) */}
+              <div className="space-y-1 pt-1 max-w-md">
+                <div className="flex items-center justify-between text-[11px] text-slate-400">
+                  <span>Progress (55%)</span>
+                  <span className="font-mono">20:45 / 22:00</span>
                 </div>
-                <div className="text-xs text-slate-400 truncate mt-0.5">
-                  {ch.nowProgramme?.title}
+                <div className="w-full bg-[#1e293b] rounded-full h-2 overflow-hidden">
+                  <div className="bg-emerald-400 h-2 rounded-full w-[55%] shadow-[0_0_8px_#22c55e]" />
                 </div>
               </div>
-              <div className="p-2 rounded-lg bg-sky-500/10 text-sky-400 group-hover:bg-sky-500 group-hover:text-white transition-colors shrink-0">
-                <Play className="w-3.5 h-3.5 fill-current" />
-              </div>
-            </Focusable>
-          ))}
-        </div>
-      </div>
+            </div>
 
-      {/* Popular Categories Grid */}
-      <div className="space-y-3">
-        <div className="flex items-center gap-2 text-sm font-bold tracking-tight text-white">
-          <TrendingUp className="w-4 h-4 text-indigo-400" />
-          <span>Explore by Category</span>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {categories.map((cat) => {
-            const Icon = cat.icon;
-            return (
+            <div className="shrink-0 flex flex-col sm:flex-row gap-3">
               <button
-                key={cat.name}
-                onClick={onNavigateToLive}
-                className={`p-4 rounded-xl bg-gradient-to-b ${cat.color} border border-white/10 hover:border-sky-400/50 transition-all text-left group hover:scale-[1.02]`}
+                onClick={() => {
+                  onSelectChannel(heroChannel);
+                  onNavigateToLive();
+                }}
+                className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm shadow-xl shadow-emerald-500/30 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-400"
               >
-                <Icon className="w-6 h-6 text-white mb-2 group-hover:scale-110 transition-transform" />
-                <div className="font-bold text-sm text-white">{cat.name}</div>
-                <div className="text-xs font-mono text-slate-400 mt-1">{cat.count}</div>
+                <Play className="w-4 h-4 fill-current" />
+                <span>Watch Live Now</span>
               </button>
-            );
-          })}
+
+              <button
+                onClick={onNavigateToLive}
+                className="flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-[#1b2330] hover:bg-[#243040] border border-white/10 text-slate-200 hover:text-white text-sm font-semibold transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-400"
+              >
+                <Tv className="w-4 h-4 text-emerald-400" />
+                <span>Open Channel Browser</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* 4. Favorites & Recently Watched */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Favorites Card */}
+          <div className="bg-[#141d2c] rounded-2xl border border-white/10 p-5 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Star className="w-4 h-4 fill-[#FFD700] text-[#FFD700]" />
+                <h3 className="text-sm font-extrabold text-emerald-400 uppercase tracking-wider">
+                  Favorites
+                </h3>
+              </div>
+              <button
+                onClick={onNavigateToLive}
+                className="text-xs text-slate-400 hover:text-emerald-400 transition-colors"
+              >
+                View all
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {iptvFavorites.map((fav, i) => (
+                <div
+                  key={i}
+                  onClick={onNavigateToLive}
+                  className="flex items-center justify-between p-3 rounded-xl bg-[#1b2330] hover:bg-[#243040] border border-white/5 hover:border-emerald-500/30 transition-colors cursor-pointer focus-within:ring-2 focus-within:ring-emerald-400"
+                >
+                  <span className="text-xs font-bold text-white">{fav.name}</span>
+                  {fav.isLive ? (
+                    <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-emerald-500 text-slate-950 shadow-sm shadow-emerald-500/20">
+                      LIVE
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-white/5 text-slate-400 border border-white/10">
+                      {fav.category}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Recently Watched Card */}
+          <div className="bg-[#141d2c] rounded-2xl border border-white/10 p-5 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-emerald-400" />
+                <h3 className="text-sm font-extrabold text-white uppercase tracking-wider">
+                  Recently Watched
+                </h3>
+              </div>
+              <span className="text-xs text-slate-400">Quick Resume</span>
+            </div>
+
+            <div className="flex flex-wrap gap-2.5">
+              {iptvRecentlyWatched.map((ch, i) => (
+                <button
+                  key={i}
+                  onClick={onNavigateToLive}
+                  className="px-3 py-2 rounded-xl bg-[#1b2330] hover:bg-emerald-500/20 hover:border-emerald-500/40 border border-white/10 text-xs font-semibold text-slate-200 hover:text-emerald-300 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                >
+                  {ch}
+                </button>
+              ))}
+            </div>
+
+            <div className="pt-2 border-t border-white/5 flex items-center justify-between text-xs text-slate-400">
+              <span>Fast Zapping Enabled</span>
+              <span className="text-emerald-400 font-mono">0.3s switch</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>

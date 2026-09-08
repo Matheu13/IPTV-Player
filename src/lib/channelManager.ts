@@ -4,6 +4,7 @@
  */
 
 import { CustomBouquet, ChannelOverrideMapping, UnifiedChannel } from './models';
+import { parseCategoryString } from './categoryNormalizer';
 
 const FAVORITES_STORAGE_KEY = 'iptv_player_favorites_v1';
 const BOUQUETS_STORAGE_KEY = 'iptv_player_bouquets_v1';
@@ -52,6 +53,117 @@ export interface WindowHydrationResult {
   limit: number;
   latencyMs: number;
   cacheHitRate: number;
+}
+
+export interface CategoryTreeSubItem {
+  id: string;
+  name: string;
+  count: number;
+}
+
+export interface CategoryTreeCountry {
+  id: string;
+  name: string;
+  count: number;
+  subCategories: CategoryTreeSubItem[];
+}
+
+export interface CategoryTreeStructure {
+  allCount: number;
+  sportsCount: number;
+  favoritesCount: number;
+  countries: CategoryTreeCountry[];
+}
+
+// Robust sports channel detection across category metadata, group titles, and channel branding
+export function isSportsChannel(ch: { name: string; category?: string; categoryName?: string; groupTitle?: string }): boolean {
+  const cat = (ch.category || ch.categoryName || ch.groupTitle || '').toLowerCase();
+  const name = ch.name.toLowerCase();
+
+  // Category matching
+  if (
+    cat.includes('sport') ||
+    cat.includes('football') ||
+    cat.includes('soccer') ||
+    cat.includes('espn') ||
+    cat.includes('bein') ||
+    cat.includes('dazn') ||
+    cat.includes('cricket') ||
+    cat.includes('tennis') ||
+    cat.includes('golf') ||
+    cat.includes('racing') ||
+    cat.includes('f1') ||
+    cat.includes('formula') ||
+    cat.includes('motogp') ||
+    cat.includes('nfl') ||
+    cat.includes('nba') ||
+    cat.includes('nhl') ||
+    cat.includes('mlb') ||
+    cat.includes('ufc') ||
+    cat.includes('wwe') ||
+    cat.includes('fight') ||
+    cat.includes('rugby') ||
+    cat.includes('athletics') ||
+    cat.includes('max sports') ||
+    cat.includes('teliaplay') ||
+    cat.includes('viaplay') ||
+    cat.includes('tv4 play events') ||
+    cat.includes('allsvenskan') ||
+    cat.includes('shl')
+  ) {
+    return true;
+  }
+
+  // Channel name keywords
+  if (
+    name.includes('sport') ||
+    name.includes('espn') ||
+    name.includes('bein') ||
+    name.includes('dazn') ||
+    name.includes('supersport') ||
+    name.includes('sky sport') ||
+    name.includes('bt sport') ||
+    name.includes('tnt sport') ||
+    name.includes('eurosport') ||
+    name.includes('fox sport') ||
+    name.includes('nbc sport') ||
+    name.includes('cbs sport') ||
+    name.includes('optus sport') ||
+    name.includes('stan sport') ||
+    name.includes('laliga') ||
+    name.includes('premier league') ||
+    name.includes('nfl') ||
+    name.includes('nba') ||
+    name.includes('nhl') ||
+    name.includes('mlb') ||
+    name.includes('ufc') ||
+    name.includes('wwe') ||
+    name.includes('f1') ||
+    name.includes('formula 1') ||
+    name.includes('formula1') ||
+    name.includes('motogp') ||
+    name.includes('max sports') ||
+    name.includes('teliaplay') ||
+    name.includes('viaplay') ||
+    name.includes('tv4 play sport') ||
+    name.includes('tv12 sport') ||
+    name.includes('tsn ') ||
+    name.includes('sportsnet') ||
+    name.includes('allsvenskan') ||
+    name.includes('fotboll') ||
+    name.includes('hockey') ||
+    name.includes('shl') ||
+    name.includes('padel') ||
+    name.includes('cykling') ||
+    name.includes('vinter') ||
+    name.includes('tv2 sport') ||
+    name.includes('nrk sport') ||
+    name.includes('vg+ sport')
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 export interface VirtualizedMemoryStats {
@@ -177,10 +289,90 @@ export class VirtualizedDataLoader {
       searchQuery?: string;
       onlyFavorites?: boolean;
       bouquetId?: string;
+      isSportsOnly?: boolean;
+      country?: string;
+      subCategory?: string;
     }
   ): WindowHydrationResult {
     const t0 = performance.now();
     let matching = this.compressedCatalog;
+
+    // Smart sports filtering (isolate all sports across channels and categories)
+    if (options?.isSportsOnly) {
+      matching = matching.filter((c) =>
+        isSportsChannel({ name: c.name, categoryName: c.categoryName })
+      );
+    }
+
+    // Country Isolation
+    if (options?.country && options.country !== 'ALL') {
+      const countryLow = options.country.toLowerCase();
+      if (countryLow === 'sweden') {
+        matching = matching.filter(
+          (c) =>
+            c.categoryName.toLowerCase().startsWith('sweden') ||
+            c.name.toLowerCase().includes('sverige') ||
+            c.name.toLowerCase().includes('svt') ||
+            c.name.toLowerCase().includes('tv4') ||
+            c.name.toLowerCase().includes('expressen')
+        );
+      } else if (countryLow === 'uk') {
+        matching = matching.filter(
+          (c) =>
+            c.categoryName.toLowerCase().startsWith('uk') ||
+            c.categoryName.toLowerCase().includes('uk') ||
+            c.name.toLowerCase().includes('bbc') ||
+            c.name.toLowerCase().includes('sky ') ||
+            c.name.toLowerCase().includes('itv')
+        );
+      } else if (countryLow === 'canada') {
+        matching = matching.filter(
+          (c) =>
+            c.categoryName.toLowerCase().startsWith('canada') ||
+            c.categoryName.toLowerCase().includes('canada') ||
+            c.name.toLowerCase().includes('cbc') ||
+            c.name.toLowerCase().includes('tsn') ||
+            c.name.toLowerCase().includes('sportsnet')
+        );
+      } else if (countryLow === 'norway') {
+        matching = matching.filter(
+          (c) =>
+            c.categoryName.toLowerCase().startsWith('norway') ||
+            c.name.toLowerCase().includes('norge') ||
+            c.name.toLowerCase().includes('nrk') ||
+            c.name.toLowerCase().includes('tv2')
+        );
+      } else if (countryLow === 'other') {
+        matching = matching.filter((c) => {
+          const cat = c.categoryName.toLowerCase();
+          return (
+            !cat.startsWith('sweden') &&
+            !cat.startsWith('uk') &&
+            !cat.startsWith('canada') &&
+            !cat.startsWith('norway')
+          );
+        });
+      } else {
+        matching = matching.filter((c) => {
+          const parsed = parseCategoryString(c.categoryName);
+          return (
+            parsed.countryId === countryLow ||
+            parsed.country.toLowerCase() === countryLow ||
+            c.categoryName.toLowerCase().startsWith(countryLow)
+          );
+        });
+      }
+    }
+
+    // Subcategory Filtering (e.g. Expressen Play, Disney+, Max Sports, TeliaPlay Events, ViaPlay Events)
+    if (options?.subCategory) {
+      const subLow = options.subCategory.toLowerCase();
+      matching = matching.filter(
+        (c) =>
+          c.categoryName.toLowerCase().includes(subLow) ||
+          c.name.toLowerCase().includes(subLow)
+      );
+    }
 
     // Fast filter on compressed metadata
     if (options?.category && options.category !== 'ALL') {
@@ -320,6 +512,121 @@ export class VirtualizedDataLoader {
     this.cacheHits = 0;
     this.cacheMisses = 0;
     this.notifySubscribers();
+  }
+
+  /**
+   * Scans compressed catalog and returns high-performance country and subcategory counts.
+   * Dynamically filters to sports channels when isSportsOnly is enabled.
+   */
+  public getCategoryTreeCounts(isSportsOnly?: boolean): CategoryTreeStructure {
+    const catalog = this.compressedCatalog;
+    const favs = new Set(ChannelManager.getFavorites().map(String));
+
+    let sportsTotal = 0;
+    for (let i = 0; i < catalog.length; i++) {
+      if (isSportsChannel({ name: catalog[i].name, categoryName: catalog[i].categoryName })) {
+        sportsTotal++;
+      }
+    }
+
+    const baseList = isSportsOnly
+      ? catalog.filter((c) => isSportsChannel({ name: c.name, categoryName: c.categoryName }))
+      : catalog;
+
+    // Subcategory definitions for Sweden matching the user's diagram
+    const swedenDefs = [
+      { id: 'Expressen Play', name: 'Expressen Play', match: (c: CompressedChannelRecord) => c.categoryName.toLowerCase().includes('expressen') || c.name.toLowerCase().includes('expressen') },
+      { id: 'Disney+', name: 'Disney+', match: (c: CompressedChannelRecord) => c.categoryName.toLowerCase().includes('disney') || c.name.toLowerCase().includes('disney') },
+      { id: 'Max Sports', name: 'Max Sports', match: (c: CompressedChannelRecord) => c.categoryName.toLowerCase().includes('max sport') || c.name.toLowerCase().includes('max sport') },
+      { id: 'TeliaPlay Events', name: 'TeliaPlay Events', match: (c: CompressedChannelRecord) => c.categoryName.toLowerCase().includes('teliaplay') || c.name.toLowerCase().includes('teliaplay') },
+      { id: 'ViaPlay Events', name: 'ViaPlay Events', match: (c: CompressedChannelRecord) => c.categoryName.toLowerCase().includes('viaplay') || c.name.toLowerCase().includes('viaplay') },
+    ];
+
+    let swedenCount = 0;
+    const swedenSubs: CategoryTreeSubItem[] = swedenDefs.map((d) => ({
+      id: d.id,
+      name: d.name,
+      count: 0,
+    }));
+
+    let ukCount = 0;
+    const ukSubs: CategoryTreeSubItem[] = [
+      { id: 'UK Sports', name: 'Sky & TNT Sports', count: 0 },
+      { id: 'UK General', name: 'BBC & ITV Broadcast', count: 0 },
+      { id: 'UK Entertainment', name: 'UK Entertainment', count: 0 },
+    ];
+
+    let canadaCount = 0;
+    const canadaSubs: CategoryTreeSubItem[] = [
+      { id: 'Canada Sports', name: 'Sports (TSN & Sportsnet)', count: 0 },
+      { id: 'Canada Local', name: 'CBC & Local Feeds', count: 0 },
+      { id: 'Canada Entertainment', name: 'Entertainment & Crave', count: 0 },
+    ];
+
+    let norwayCount = 0;
+    const norwaySubs: CategoryTreeSubItem[] = [
+      { id: 'Norway Sports', name: 'TV2 Sport & Events', count: 0 },
+      { id: 'Norway General', name: 'NRK & Allment', count: 0 },
+    ];
+
+    let otherCount = 0;
+    const otherSubs: CategoryTreeSubItem[] = [
+      { id: 'Global Sports', name: 'beIN, ESPN, DAZN, Eurosport', count: 0 },
+      { id: 'US Networks', name: 'US Networks & News', count: 0 },
+      { id: 'Europe', name: 'Europe & International', count: 0 },
+      { id: 'Cinema', name: 'Cinema & HBO', count: 0 },
+      { id: '4K Ultra HD', name: '4K Ultra Master Feeds', count: 0 },
+    ];
+
+    for (let i = 0; i < baseList.length; i++) {
+      const c = baseList[i];
+      const catLow = c.categoryName.toLowerCase();
+      const nameLow = c.name.toLowerCase();
+
+      // Check Sweden
+      if (catLow.startsWith('sweden') || nameLow.includes('sverige') || nameLow.includes('expressen') || nameLow.includes('teliaplay') || nameLow.includes('viaplay') || nameLow.includes('max sport')) {
+        swedenCount++;
+        for (let j = 0; j < swedenDefs.length; j++) {
+          if (swedenDefs[j].match(c)) {
+            swedenSubs[j].count++;
+          }
+        }
+      } else if (catLow.startsWith('uk') || nameLow.includes('bbc ') || nameLow.includes('sky ') || nameLow.includes('itv')) {
+        ukCount++;
+        if (catLow.includes('sport') || isSportsChannel({ name: c.name, categoryName: c.categoryName })) ukSubs[0].count++;
+        else if (catLow.includes('general')) ukSubs[1].count++;
+        else ukSubs[2].count++;
+      } else if (catLow.startsWith('canada') || nameLow.includes('cbc ') || nameLow.includes('tsn ') || nameLow.includes('sportsnet')) {
+        canadaCount++;
+        if (catLow.includes('sport') || nameLow.includes('tsn') || nameLow.includes('sportsnet') || isSportsChannel({ name: c.name, categoryName: c.categoryName })) canadaSubs[0].count++;
+        else if (catLow.includes('local')) canadaSubs[1].count++;
+        else canadaSubs[2].count++;
+      } else if (catLow.startsWith('norway') || nameLow.includes('norge') || nameLow.includes('nrk') || nameLow.includes('tv2')) {
+        norwayCount++;
+        if (catLow.includes('sport') || nameLow.includes('sport') || isSportsChannel({ name: c.name, categoryName: c.categoryName })) norwaySubs[0].count++;
+        else norwaySubs[1].count++;
+      } else {
+        otherCount++;
+        if (isSportsChannel({ name: c.name, categoryName: c.categoryName })) otherSubs[0].count++;
+        else if (catLow.includes('us')) otherSubs[1].count++;
+        else if (catLow.includes('europe') || catLow.includes('belgium')) otherSubs[2].count++;
+        else if (catLow.includes('movie') || catLow.includes('cinema')) otherSubs[3].count++;
+        else if (catLow.includes('4k')) otherSubs[4].count++;
+      }
+    }
+
+    return {
+      allCount: isSportsOnly ? sportsTotal : catalog.length,
+      sportsCount: sportsTotal,
+      favoritesCount: favs.size,
+      countries: [
+        { id: 'Sweden', name: 'Sweden', count: swedenCount, subCategories: swedenSubs },
+        { id: 'UK', name: 'UK', count: ukCount, subCategories: ukSubs },
+        { id: 'Canada', name: 'Canada', count: canadaCount, subCategories: canadaSubs },
+        { id: 'Norway', name: 'Norway', count: norwayCount, subCategories: norwaySubs },
+        { id: 'Other', name: 'Other', count: otherCount, subCategories: otherSubs },
+      ],
+    };
   }
 
   public subscribe(fn: () => void): () => void {
@@ -535,9 +842,16 @@ export class ChannelManager {
       searchQuery?: string;
       onlyFavorites?: boolean;
       bouquetId?: string;
+      isSportsOnly?: boolean;
+      country?: string;
+      subCategory?: string;
     }
   ): WindowHydrationResult {
     return globalVirtualizedDataLoader.getHydratedWindow(offset, limit, options);
+  }
+
+  public static getCategoryTreeCounts(isSportsOnly?: boolean): CategoryTreeStructure {
+    return globalVirtualizedDataLoader.getCategoryTreeCounts(isSportsOnly);
   }
 
   public static getTop100Hydrated(): UnifiedChannel[] {

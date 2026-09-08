@@ -33,12 +33,13 @@ export const Focusable: React.FC<FocusableProps> = ({
   }, [isFocused]);
 
   const defaultFocusStyle =
-    'ring-2 ring-sky-400 ring-offset-2 ring-offset-[#080b11] shadow-[0_0_20px_rgba(56,189,248,0.35)] scale-[1.02] bg-slate-800/90';
+    'ring-2 ring-emerald-400 ring-offset-2 ring-offset-[#080b11] shadow-[0_0_24px_rgba(34,197,94,0.5)] scale-[1.02] bg-slate-800/95 text-white';
 
   return (
     <div
       ref={elRef}
       id={id}
+      data-focused={isFocused ? 'true' : undefined}
       tabIndex={disabled ? -1 : 0}
       role="button"
       aria-disabled={disabled}
@@ -52,7 +53,7 @@ export const Focusable: React.FC<FocusableProps> = ({
           if (onSelect) onSelect();
         }
       }}
-      className={`outline-none transition-all duration-150 ease-out cursor-pointer select-none ${className} ${
+      className={`outline-none transition-all duration-200 ease-out cursor-pointer select-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#080b11] focus-visible:shadow-[0_0_24px_rgba(34,197,94,0.5)] focus-visible:scale-[1.02] ${className} ${
         isFocused ? (focusClassName || defaultFocusStyle) : ''
       } ${disabled ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
       {...rest}

@@ -252,24 +252,24 @@ export const MoviesScreen: React.FC<MoviesScreenProps> = () => {
           <div className="flex items-center gap-3 pt-2">
             <button
               onClick={() => handlePlayMovie(featuredMovie)}
-              className="flex items-center gap-2 px-6 py-3 rounded-xl bg-sky-500 hover:bg-sky-400 text-white font-bold text-sm shadow-xl shadow-sky-500/25 transition-all transform active:scale-95 cursor-pointer"
+              className="flex items-center gap-2 px-6 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm shadow-xl shadow-emerald-500/30 transition-all transform active:scale-95 cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-400"
             >
-              <Play className="w-4 h-4 fill-white" />
+              <Play className="w-4 h-4 fill-slate-950" />
               <span>Watch Now</span>
             </button>
             <button
               onClick={() => setSelectedMovie(featuredMovie)}
-              className="flex items-center gap-2 px-4 py-3 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-white font-semibold text-sm border border-slate-700 transition cursor-pointer"
+              className="flex items-center gap-2 px-4 py-3 rounded-xl bg-[#141c28] hover:bg-[#1a2536] text-white font-bold text-sm border border-white/10 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-400"
             >
-              <Info className="w-4 h-4 text-slate-300" />
+              <Info className="w-4 h-4 text-emerald-400" />
               <span>Details</span>
             </button>
             <button
               onClick={(e) => toggleWatchlist(featuredMovie.streamId, e)}
-              className={`p-3 rounded-xl border transition cursor-pointer ${
+              className={`p-3 rounded-xl border transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-400 ${
                 watchlist.includes(featuredMovie.streamId)
                   ? 'bg-rose-500/20 border-rose-500 text-rose-400'
-                  : 'bg-slate-800/80 border-slate-700 text-slate-300 hover:text-white'
+                  : 'bg-[#141c28] border-white/10 text-slate-300 hover:text-white'
               }`}
               title="Add to Watchlist"
             >
@@ -290,7 +290,7 @@ export const MoviesScreen: React.FC<MoviesScreenProps> = () => {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search movies, cast, directors..."
-              className="w-full pl-10 pr-4 py-2 rounded-xl bg-[#111722] border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 transition"
+              className="w-full pl-10 pr-4 py-2 rounded-xl bg-[#111827] border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition"
             />
             {searchQuery && (
               <button
@@ -307,28 +307,28 @@ export const MoviesScreen: React.FC<MoviesScreenProps> = () => {
             <span className="text-xs text-slate-400 font-mono font-semibold">
               {filteredMovies.length} {filteredMovies.length === 1 ? 'Title' : 'Titles'} Available
             </span>
-            <div className="flex items-center gap-2 bg-[#111722] border border-slate-800 rounded-xl p-1 text-xs">
+            <div className="flex items-center gap-2 bg-[#111827] border border-white/10 rounded-xl p-1 text-xs">
               <span className="text-slate-400 pl-2">Sort:</span>
               <button
                 onClick={() => setSortBy('rating')}
-                className={`px-2.5 py-1 rounded-lg font-semibold transition ${
-                  sortBy === 'rating' ? 'bg-sky-500 text-white' : 'text-slate-400 hover:text-white'
+                className={`px-2.5 py-1 rounded-lg font-bold transition ${
+                  sortBy === 'rating' ? 'bg-emerald-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
                 }`}
               >
                 Rating
               </button>
               <button
                 onClick={() => setSortBy('recent')}
-                className={`px-2.5 py-1 rounded-lg font-semibold transition ${
-                  sortBy === 'recent' ? 'bg-sky-500 text-white' : 'text-slate-400 hover:text-white'
+                className={`px-2.5 py-1 rounded-lg font-bold transition ${
+                  sortBy === 'recent' ? 'bg-emerald-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
                 }`}
               >
                 Recent
               </button>
               <button
                 onClick={() => setSortBy('name')}
-                className={`px-2.5 py-1 rounded-lg font-semibold transition ${
-                  sortBy === 'name' ? 'bg-sky-500 text-white' : 'text-slate-400 hover:text-white'
+                className={`px-2.5 py-1 rounded-lg font-bold transition ${
+                  sortBy === 'name' ? 'bg-emerald-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
                 }`}
               >
                 A-Z
@@ -345,10 +345,10 @@ export const MoviesScreen: React.FC<MoviesScreenProps> = () => {
               <button
                 key={genre}
                 onClick={() => setSelectedGenre(genre)}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-400 ${
                   isSelected
-                    ? 'bg-sky-500 text-white shadow-md shadow-sky-500/20'
-                    : 'bg-[#111722] text-slate-400 border border-slate-800 hover:text-slate-200 hover:bg-slate-800'
+                    ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/25'
+                    : 'bg-[#111827] text-slate-400 border border-white/10 hover:text-slate-200 hover:bg-[#192436]'
                 }`}
               >
                 {genre}
@@ -372,7 +372,7 @@ export const MoviesScreen: React.FC<MoviesScreenProps> = () => {
                 setSearchQuery('');
                 setSelectedGenre('All Genres');
               }}
-              className="px-4 py-2 bg-sky-500/20 border border-sky-500/40 text-sky-400 rounded-lg text-xs font-bold hover:bg-sky-500/30 transition"
+              className="px-4 py-2 bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 rounded-xl text-xs font-bold hover:bg-emerald-500/30 transition"
             >
               Reset Filters
             </button>
@@ -385,7 +385,8 @@ export const MoviesScreen: React.FC<MoviesScreenProps> = () => {
                 <div
                   key={`movie-card-${movie.id || movie.streamId}-${idx}`}
                   onClick={() => setSelectedMovie(movie)}
-                  className="group relative bg-[#111722] rounded-xl overflow-hidden border border-slate-800/80 hover:border-sky-500/60 shadow-lg transition-all duration-300 transform hover:-translate-y-1 cursor-pointer flex flex-col"
+                  tabIndex={0}
+                  className="group relative bg-[#111827] rounded-2xl overflow-hidden border border-white/5 hover:border-emerald-400 shadow-lg transition-all duration-300 transform hover:-translate-y-1 hover:shadow-[0_0_20px_rgba(34,197,94,0.3)] focus:outline-none focus:ring-2 focus:ring-emerald-400 cursor-pointer flex flex-col"
                 >
                   {/* Poster Thumbnail */}
                   <div className="relative aspect-[2/3] w-full overflow-hidden bg-slate-900">
@@ -395,10 +396,10 @@ export const MoviesScreen: React.FC<MoviesScreenProps> = () => {
                       loading="lazy"
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-3">
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-transparent to-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-3">
                       {/* Top Action Badge */}
                       <div className="flex justify-between items-center">
-                        <span className="px-1.5 py-0.5 rounded bg-black/70 text-[10px] font-mono text-sky-300 font-bold border border-white/10">
+                        <span className="px-1.5 py-0.5 rounded-md bg-black/70 text-[10px] font-mono text-emerald-400 font-bold border border-emerald-500/30">
                           {movie.containerExtension.toUpperCase()}
                         </span>
                         <button
@@ -419,20 +420,20 @@ export const MoviesScreen: React.FC<MoviesScreenProps> = () => {
                           e.stopPropagation();
                           handlePlayMovie(movie);
                         }}
-                        className="w-10 h-10 rounded-full bg-sky-500 text-white flex items-center justify-center self-center shadow-lg shadow-sky-500/40 transform scale-90 group-hover:scale-100 transition-all hover:bg-sky-400"
+                        className="w-10 h-10 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center self-center shadow-lg shadow-emerald-500/40 transform scale-90 group-hover:scale-100 transition-all hover:bg-emerald-400"
                       >
-                        <Play className="w-5 h-5 fill-white ml-0.5" />
+                        <Play className="w-5 h-5 fill-slate-950 ml-0.5" />
                       </button>
 
                       {/* Duration info */}
                       <div className="text-[11px] text-slate-300 font-mono flex items-center gap-1">
-                        <Clock className="w-3 h-3 text-slate-400" />
+                        <Clock className="w-3 h-3 text-emerald-400" />
                         {movie.durationFormatted}
                       </div>
                     </div>
 
                     {/* Rating Pill */}
-                    <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/80 backdrop-blur-md border border-white/10 flex items-center gap-1 text-[11px] font-bold text-amber-400">
+                    <div className="absolute top-2 left-2 px-2 py-0.5 rounded-lg bg-black/80 backdrop-blur-md border border-white/10 flex items-center gap-1 text-[11px] font-bold text-amber-400">
                       <Star className="w-3 h-3 fill-amber-400" />
                       {movie.rating}
                     </div>
@@ -440,7 +441,7 @@ export const MoviesScreen: React.FC<MoviesScreenProps> = () => {
 
                   {/* Metadata Content */}
                   <div className="p-3 flex-1 flex flex-col justify-between space-y-1">
-                    <h3 className="text-xs font-bold text-white group-hover:text-sky-300 transition-colors line-clamp-1">
+                    <h3 className="text-xs font-bold text-white group-hover:text-emerald-400 transition-colors line-clamp-1">
                       {movie.name}
                     </h3>
                     <div className="flex items-center justify-between text-[11px] text-slate-400">
@@ -458,7 +459,7 @@ export const MoviesScreen: React.FC<MoviesScreenProps> = () => {
       {/* 4. Movie Detail Modal Dialog */}
       {selectedMovie && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 animate-fadeIn">
-          <div className="relative w-full max-w-3xl bg-[#111722] border border-slate-700/80 rounded-2xl overflow-hidden shadow-2xl flex flex-col md:flex-row max-h-[90vh]">
+          <div className="relative w-full max-w-3xl bg-[#111827] border border-white/10 rounded-2xl overflow-hidden shadow-2xl flex flex-col md:flex-row max-h-[90vh]">
             {/* Close Button */}
             <button
               onClick={() => setSelectedMovie(null)}
@@ -474,17 +475,17 @@ export const MoviesScreen: React.FC<MoviesScreenProps> = () => {
                 alt={selectedMovie.name}
                 className="w-full h-full object-cover"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#111722] md:hidden" />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#111827] md:hidden" />
             </div>
 
             {/* Information column */}
             <div className="md:w-2/3 p-6 sm:p-8 flex flex-col justify-between overflow-y-auto space-y-4">
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
-                  <span className="px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/40 text-[10px] font-bold font-mono">
+                  <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[10px] font-bold font-mono">
                     {selectedMovie.containerExtension.toUpperCase()} MASTER
                   </span>
-                  <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-bold flex items-center gap-1">
+                  <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-bold flex items-center gap-1">
                     <Star className="w-3 h-3 fill-amber-400" /> {selectedMovie.rating} / 10
                   </span>
                   <span className="text-xs text-slate-400 font-mono">
@@ -501,7 +502,7 @@ export const MoviesScreen: React.FC<MoviesScreenProps> = () => {
                 </p>
 
                 {/* Director and Cast */}
-                <div className="space-y-1.5 pt-2 border-t border-slate-800 text-xs">
+                <div className="space-y-1.5 pt-2 border-t border-white/10 text-xs">
                   {selectedMovie.director && (
                     <div className="flex gap-2">
                       <span className="text-slate-500 font-semibold w-16">Director:</span>
@@ -522,23 +523,23 @@ export const MoviesScreen: React.FC<MoviesScreenProps> = () => {
               </div>
 
               {/* Action Buttons */}
-              <div className="flex items-center gap-3 pt-4 border-t border-slate-800">
+              <div className="flex items-center gap-3 pt-4 border-t border-white/10">
                 <button
                   onClick={() => {
                     handlePlayMovie(selectedMovie);
                     setSelectedMovie(null);
                   }}
-                  className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-sky-500 hover:bg-sky-400 text-white font-bold text-xs shadow-lg shadow-sky-500/25 transition cursor-pointer"
+                  className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/30 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-400"
                 >
-                  <Play className="w-4 h-4 fill-white" />
+                  <Play className="w-4 h-4 fill-slate-950" />
                   <span>Start Movie</span>
                 </button>
                 <button
                   onClick={() => toggleWatchlist(selectedMovie.streamId)}
-                  className={`px-4 py-3 rounded-xl border font-semibold text-xs flex items-center gap-1.5 transition cursor-pointer ${
+                  className={`px-4 py-3 rounded-xl border font-semibold text-xs flex items-center gap-1.5 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-400 ${
                     watchlist.includes(selectedMovie.streamId)
                       ? 'bg-rose-500/20 border-rose-500 text-rose-300'
-                      : 'bg-slate-800 border-slate-700 text-slate-200 hover:text-white'
+                      : 'bg-[#141c28] border-white/10 text-slate-200 hover:text-white'
                   }`}
                 >
                   <Heart

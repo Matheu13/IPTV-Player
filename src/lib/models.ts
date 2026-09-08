@@ -40,6 +40,10 @@ export interface UnifiedChannel {
   formatsAvailable: string[];
   resolvedStreamUrl?: string;
   activeFormat?: string;
+  alternativeStreamUrls?: string[];
+  validationStatus?: 'online' | 'degraded' | 'dead' | 'unchecked';
+  validationLatencyMs?: number;
+  lastValidatedAt?: number;
   isFavorite?: boolean;
   isHidden?: boolean;
   customOrder?: number;

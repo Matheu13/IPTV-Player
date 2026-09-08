@@ -243,7 +243,9 @@ export function fetchManifestWithRedirects(
 }
 
 /**
- * Handles live stream proxy request for M3U8 or TS
+ * Handles live stream proxy request for M3U8 or TS.
+ * Directly proxies the channel's actual stream URL from database or provider.
+ * If upstream stream is unreachable, responds with HTTP 502 instead of substituting test feeds.
  */
 export async function handleLiveStreamProxy(
   streamId: string | number,
@@ -280,7 +282,7 @@ export async function handleLiveStreamProxy(
         return;
       }
 
-      // If upstream failed or returned non-200, respond with upstream error (no hardcoded overrides)
+      // Upstream failed or returned non-200: strictly respond with 502 (no fallback substitutions)
       if (!res.headersSent) {
         res.status(502).json({ error: `Channel stream ${streamId} unreachable upstream` });
       }
@@ -299,38 +301,6 @@ export async function handleLiveStreamProxy(
       }
     }
   }
-}
-
-/**
- * Serves a guaranteed playable HLS stream for channels when upstream provider is offline
- */
-export function serveResilientFallbackHls(
-  streamId: string | number,
-  req: Request,
-  res: Response
-): void {
-  if (res.headersSent) return;
-
-  // Real 24/7 live television broadcast streams (NO synthetic test patterns / NO Tears of Steel)
-  const fallbackHlsStreams = [
-    'https://dwamdstream102.akamaized.net/hls/live/2015525/dwstream102/index.m3u8', // DW News Live HD
-    'https://rbmn-live.akamaized.net/hls/live/590964/BoRB-AT/master.m3u8', // Red Bull TV Live HD
-    'https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/5d8a9f029fa2a061c518884c/master.m3u8?advertisingId=&appName=web&appVersion=unknown&appStoreUrl=&architecture=&buildVersion=&clientTime=0&deviceDNT=0&deviceId=unknown&deviceMake=Chrome&deviceModel=Chrome&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=unknown&userId=', // Pluto TV Movies
-    'https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/569546031a619b8f753147e4/master.m3u8?advertisingId=&appName=web&appVersion=unknown&appStoreUrl=&architecture=&buildVersion=&clientTime=0&deviceDNT=0&deviceId=unknown&deviceMake=Chrome&deviceModel=Chrome&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=unknown&userId=', // Pluto TV Sports
-    'https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/5cb9e09d17d54d19bb810014/master.m3u8?advertisingId=&appName=web&appVersion=unknown&appStoreUrl=&architecture=&buildVersion=&clientTime=0&deviceDNT=0&deviceId=unknown&deviceMake=Chrome&deviceModel=Chrome&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=unknown&userId=', // Pluto TV News
-    'https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/59160d5b5bb2df4558e80bc8/master.m3u8?advertisingId=&appName=web&appVersion=unknown&appStoreUrl=&architecture=&buildVersion=&clientTime=0&deviceDNT=0&deviceId=unknown&deviceMake=Chrome&deviceModel=Chrome&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=unknown&userId=', // Pluto TV Action
-    'https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/5a973719bf3e6d15bf0fa5f9/master.m3u8?advertisingId=&appName=web&appVersion=unknown&appStoreUrl=&architecture=&buildVersion=&clientTime=0&deviceDNT=0&deviceId=unknown&deviceMake=Chrome&deviceModel=Chrome&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=unknown&userId=', // Pluto TV Music
-  ];
-
-  const numId = typeof streamId === 'number' ? streamId : parseInt(String(streamId).replace(/\D/g, '') || '0', 10);
-  const targetFallback = fallbackHlsStreams[Math.abs(numId) % fallbackHlsStreams.length];
-
-  // Directly serve the resilient stream proxy without redirect overhead
-  handleUniversalProxy(targetFallback, req, res).catch(() => {
-    if (!res.headersSent) {
-      res.redirect(targetFallback);
-    }
-  });
 }
 
 /**

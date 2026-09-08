@@ -890,6 +890,14 @@ export class SQLiteEpgDB {
     this.db.exec('BEGIN TRANSACTION;');
     try {
       for (const ch of channels) {
+        const genuineStreamUrl =
+          ch.resolvedStreamUrl ||
+          (ch as any).resolved_stream_url ||
+          (ch as any).streamUrl ||
+          (ch as any).directSourceUrl ||
+          (ch as any).directUrl ||
+          '';
+
         stmt.run(
           String(ch.id || `stream_${ch.streamId}`),
           sourceId,
@@ -904,7 +912,7 @@ export class SQLiteEpgDB {
           Number(ch.tvArchiveDurationDays) || 0,
           Number(ch.num) || 0,
           JSON.stringify(ch.formatsAvailable || ['m3u8', 'ts']),
-          ch.resolvedStreamUrl || '',
+          genuineStreamUrl,
           ch.activeFormat || 'm3u8',
           now
         );
@@ -1038,78 +1046,12 @@ export class SQLiteEpgDB {
   }
 
   /**
-   * Ensures all channels have guaranteed working live broadcast streams
-   * and eliminates empty stream URLs or synthetic test data fallbacks.
+   * Preserves channel stream URLs strictly from actual provider or M3U source feeds.
+   * Does not substitute artificial test feeds.
    */
   public upgradeToLivePublicStreams(): number {
-    try {
-      const categoryStreamMap: Record<string, string[]> = {
-        cat_sports: [
-          'https://rbmn-live.akamaized.net/hls/live/590964/BoRB-AT/master.m3u8',
-          'https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/569546031a619b8f753147e4/master.m3u8?advertisingId=&appName=web&appVersion=unknown&appStoreUrl=&architecture=&buildVersion=&clientTime=0&deviceDNT=0&deviceId=unknown&deviceMake=Chrome&deviceModel=Chrome&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=unknown&userId=',
-        ],
-        cat_news: [
-          'https://dwamdstream102.akamaized.net/hls/live/2015525/dwstream102/index.m3u8',
-          'https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/5cb9e09d17d54d19bb810014/master.m3u8?advertisingId=&appName=web&appVersion=unknown&appStoreUrl=&architecture=&buildVersion=&clientTime=0&deviceDNT=0&deviceId=unknown&deviceMake=Chrome&deviceModel=Chrome&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=unknown&userId=',
-        ],
-        cat_movies: [
-          'https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/5d8a9f029fa2a061c518884c/master.m3u8?advertisingId=&appName=web&appVersion=unknown&appStoreUrl=&architecture=&buildVersion=&clientTime=0&deviceDNT=0&deviceId=unknown&deviceMake=Chrome&deviceModel=Chrome&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=unknown&userId=',
-          'https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/59160d5b5bb2df4558e80bc8/master.m3u8?advertisingId=&appName=web&appVersion=unknown&appStoreUrl=&architecture=&buildVersion=&clientTime=0&deviceDNT=0&deviceId=unknown&deviceMake=Chrome&deviceModel=Chrome&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=unknown&userId=',
-        ],
-        cat_4k: [
-          'https://rbmn-live.akamaized.net/hls/live/590964/BoRB-AT/master.m3u8',
-          'https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/5cb9e248b62aa419f635c7e1/master.m3u8?advertisingId=&appName=web&appVersion=unknown&appStoreUrl=&architecture=&buildVersion=&clientTime=0&deviceDNT=0&deviceId=unknown&deviceMake=Chrome&deviceModel=Chrome&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=unknown&userId=',
-        ],
-        cat_kids: [
-          'https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/5cf171a8264906dbe8cf1e85/master.m3u8?advertisingId=&appName=web&appVersion=unknown&appStoreUrl=&architecture=&buildVersion=&clientTime=0&deviceDNT=0&deviceId=unknown&deviceMake=Chrome&deviceModel=Chrome&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=unknown&userId=',
-        ],
-        cat_music: [
-          'https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/5a973719bf3e6d15bf0fa5f9/master.m3u8?advertisingId=&appName=web&appVersion=unknown&appStoreUrl=&architecture=&buildVersion=&clientTime=0&deviceDNT=0&deviceId=unknown&deviceMake=Chrome&deviceModel=Chrome&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=unknown&userId=',
-        ],
-        cat_docs: [
-          'https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/5df29d380962310009c919d7/master.m3u8?advertisingId=&appName=web&appVersion=unknown&appStoreUrl=&architecture=&buildVersion=&clientTime=0&deviceDNT=0&deviceId=unknown&deviceMake=Chrome&deviceModel=Chrome&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=unknown&userId=',
-        ],
-        general: [
-          'https://dwamdstream102.akamaized.net/hls/live/2015525/dwstream102/index.m3u8',
-          'https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/5bb534431e2182746ca7a549/master.m3u8?advertisingId=&appName=web&appVersion=unknown&appStoreUrl=&architecture=&buildVersion=&clientTime=0&deviceDNT=0&deviceId=unknown&deviceMake=Chrome&deviceModel=Chrome&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=unknown&userId=',
-          'https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/59650050853744be6c1ec002/master.m3u8?advertisingId=&appName=web&appVersion=unknown&appStoreUrl=&architecture=&buildVersion=&clientTime=0&deviceDNT=0&deviceId=unknown&deviceMake=Chrome&deviceModel=Chrome&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=unknown&userId=',
-        ],
-      };
-
-      let updatedTotal = 0;
-      for (const [catKey, streamUrls] of Object.entries(categoryStreamMap)) {
-        const targetUrl = streamUrls[0];
-        const secondUrl = streamUrls[1] || streamUrls[0];
-
-        if (catKey === 'general') {
-          const stmt = this.db.prepare(`
-            UPDATE iptv_channels
-            SET resolved_stream_url = CASE WHEN (stream_id % 2 = 0) THEN ? ELSE ? END
-            WHERE (resolved_stream_url IS NULL OR resolved_stream_url = '' OR resolved_stream_url LIKE '%tears-of-steel%' OR resolved_stream_url LIKE '%mux.dev%')
-              AND category_id NOT IN ('cat_sports', 'cat_news', 'cat_movies', 'cat_4k', 'cat_kids', 'cat_music', 'cat_docs');
-          `);
-          const res = stmt.run(targetUrl, secondUrl) as any;
-          updatedTotal += (res?.changes || 0);
-        } else {
-          const stmt = this.db.prepare(`
-            UPDATE iptv_channels
-            SET resolved_stream_url = CASE WHEN (stream_id % 2 = 0) THEN ? ELSE ? END
-            WHERE (resolved_stream_url IS NULL OR resolved_stream_url = '' OR resolved_stream_url LIKE '%tears-of-steel%' OR resolved_stream_url LIKE '%mux.dev%')
-              AND category_id = ?;
-          `);
-          const res = stmt.run(targetUrl, secondUrl, catKey) as any;
-          updatedTotal += (res?.changes || 0);
-        }
-      }
-
-      if (updatedTotal > 0) {
-        console.log(`[SQLite] Upgraded ${updatedTotal} channels with verified active live broadcast streams.`);
-      }
-      return updatedTotal;
-    } catch (e: any) {
-      console.warn('[SQLite] upgradeToLivePublicStreams notice:', e.message);
-      return 0;
-    }
+    // Strictly preserve genuine provider streams; no test feed overwrites.
+    return 0;
   }
 
   /**
