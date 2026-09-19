@@ -607,7 +607,9 @@ export const TvLokLiveScreen: React.FC<TvLokLiveScreenProps> = ({ onSelectChanne
           if (focusedCategoryIndex > 0) {
             const nextIdx = focusedCategoryIndex - 1;
             setFocusedCategoryIndex(nextIdx);
-            setSelectedCategoryId(selectableCategoryEntries[nextIdx].id);
+            if (selectableCategoryEntries[nextIdx]?.id) {
+              setSelectedCategoryId(selectableCategoryEntries[nextIdx].id);
+            }
             setFocusedChannelIndex(0);
           } else {
             setActiveFocusArea('search');
@@ -618,7 +620,9 @@ export const TvLokLiveScreen: React.FC<TvLokLiveScreenProps> = ({ onSelectChanne
           if (focusedCategoryIndex < selectableCategoryEntries.length - 1) {
             const nextIdx = focusedCategoryIndex + 1;
             setFocusedCategoryIndex(nextIdx);
-            setSelectedCategoryId(selectableCategoryEntries[nextIdx].id);
+            if (selectableCategoryEntries[nextIdx]?.id) {
+              setSelectedCategoryId(selectableCategoryEntries[nextIdx].id);
+            }
             setFocusedChannelIndex(0);
           }
         } else if (e.key === 'ArrowRight') {
@@ -626,7 +630,7 @@ export const TvLokLiveScreen: React.FC<TvLokLiveScreenProps> = ({ onSelectChanne
           setActiveFocusArea('grid');
         } else if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
-          if (selectableCategoryEntries[focusedCategoryIndex]) {
+          if (selectableCategoryEntries[focusedCategoryIndex]?.id) {
             setSelectedCategoryId(selectableCategoryEntries[focusedCategoryIndex].id);
             setActiveFocusArea('grid');
           }

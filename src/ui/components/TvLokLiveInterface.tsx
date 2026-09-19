@@ -33,6 +33,8 @@ import {
   Settings,
   Activity,
   Palette,
+  AlertCircle,
+  LogOut,
 } from 'lucide-react';
 import { ChannelRowData } from './ChannelRow';
 import { usePlayback } from '../context/PlaybackContext';
@@ -107,7 +109,7 @@ interface PersistentLiveInterfaceState {
   timelineFocusMinute: number;
   scrollLeft: number;
   scrollTop: number;
-  activeFocusArea: 'rail' | 'categories' | 'grid' | 'search';
+  activeFocusArea: 'categories' | 'channels' | 'player' | 'search';
 }
 
 const persistentState: PersistentLiveInterfaceState = {
@@ -259,6 +261,7 @@ export interface TvLokLiveInterfaceProps {
   activeNavTab?: NavTabId;
   onSelectNavTab?: (tab: NavTabId) => void;
   onOpenSourceManager?: () => void;
+  onExit?: () => void;
 }
 
 export const TvLokLiveInterface: React.FC<TvLokLiveInterfaceProps> = ({
@@ -268,14 +271,19 @@ export const TvLokLiveInterface: React.FC<TvLokLiveInterfaceProps> = ({
   activeNavTab = 'live',
   onSelectNavTab,
   onOpenSourceManager,
+  onExit,
 }) => {
   const { state: playbackState, playChannel, setPresentationMode } = usePlayback();
   const { isKidsMode, filterChannelsForProfile } = useProfile();
 
-  // Navigation & Focus Area: 'rail' | 'categories' | 'grid' | 'search'
-  const [activeFocusArea, setActiveFocusArea] = useState<'rail' | 'categories' | 'grid' | 'search'>(
+  // Navigation & Focus Area: 'categories' | 'channels' | 'player' | 'search'
+  const [activeFocusArea, setActiveFocusArea] = useState<'categories' | 'channels' | 'player' | 'search'>(
     persistentState.activeFocusArea
   );
+
+  // Exit Confirmation Dialog State (Triggers on 'Back' at root category panel)
+  const [showExitDialog, setShowExitDialog] = useState<boolean>(false);
+  const [focusedExitButton, setFocusedExitButton] = useState<'cancel' | 'exit'>('cancel');
 
   // Ingested Channel Data directly from existing IPTV engine
   const [rawChannels, setRawChannels] = useState<ChannelRowData[]>([]);
@@ -286,13 +294,7 @@ export const TvLokLiveInterface: React.FC<TvLokLiveInterfaceProps> = ({
   // Category & Filter States initialized from persistentState
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>(persistentState.selectedCategoryId);
   const [focusedCategoryIndex, setFocusedCategoryIndex] = useState<number>(0);
-  const [expandedCountries, setExpandedCountries] = useState<Record<string, boolean>>({
-    country_sweden: true,
-    country_uk: false,
-    country_canada: false,
-    country_norway: false,
-    group_other: false,
-  });
+  const [expandedCountries, setExpandedCountries] = useState<Record<string, boolean>>({});
   const [searchQuery, setSearchQuery] = useState<string>(persistentState.searchQuery);
   const [focusedChannelIndex, setFocusedChannelIndex] = useState<number>(0);
   const [focusedProgramId, setFocusedProgramId] = useState<string | null>(persistentState.focusedProgramId);
@@ -307,6 +309,7 @@ export const TvLokLiveInterface: React.FC<TvLokLiveInterfaceProps> = ({
 
   const gridContainerRef = useRef<HTMLDivElement>(null);
   const categoryListRef = useRef<HTMLDivElement>(null);
+  const channelListRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const isInitialMount = useRef<boolean>(true);
 
@@ -346,7 +349,11 @@ export const TvLokLiveInterface: React.FC<TvLokLiveInterfaceProps> = ({
   // 1. INGESTION DATA SUBSCRIPTION (STRICTLY FROM EXISTING ENGINE)
   useEffect(() => {
     const syncFromEngine = () => {
-      const channels = globalUnifiedIptvEngine.getAllChannels();
+      let channels = globalUnifiedIptvEngine.getAllChannels();
+      if (!channels || channels.length === 0) {
+        globalUnifiedIptvEngine.ensureChannelsLoaded();
+        channels = globalUnifiedIptvEngine.getAllChannels();
+      }
       const favs = new Set(globalUnifiedIptvEngine.getFavorites());
       const recents = globalUnifiedIptvEngine.getRecentChannels().map((c) => c.id);
       const sources = globalUnifiedIptvEngine.getSources();
@@ -401,6 +408,17 @@ export const TvLokLiveInterface: React.FC<TvLokLiveInterfaceProps> = ({
       historyCount: recentChannelIds.length,
     });
   }, [rawChannels, favorites.size, recentChannelIds.length]);
+
+  // Dynamically expand the first category group whenever hierarchy changes if nothing is expanded
+  useEffect(() => {
+    if (hierarchyTree.countryGroups.length > 0) {
+      setExpandedCountries((prev) => {
+        const hasAnyExpanded = hierarchyTree.countryGroups.some((g) => Boolean(prev[g.id] || prev[g.label]));
+        if (hasAnyExpanded) return prev;
+        return { ...prev, [hierarchyTree.countryGroups[0].id]: true };
+      });
+    }
+  }, [hierarchyTree.countryGroups]);
 
   // 3. FILTER CHANNELS BASED ON ACTIVE CATEGORY, SEARCH, AND PROFILE
   const filteredChannels = useMemo(() => {
@@ -491,7 +509,7 @@ export const TvLokLiveInterface: React.FC<TvLokLiveInterfaceProps> = ({
 
   useEffect(() => {
     const ch = currentChannelRef.current;
-    if (ch && activeFocusArea === 'grid') {
+    if (ch && (activeFocusArea === 'channels' || activeFocusArea === 'player')) {
       if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
       previewTimerRef.current = setTimeout(() => {
         if (playbackState.currentChannel?.id !== ch.id) {
@@ -504,18 +522,15 @@ export const TvLokLiveInterface: React.FC<TvLokLiveInterfaceProps> = ({
     };
   }, [currentChannel?.id, activeFocusArea, playbackState.currentChannel?.id]);
 
-  // Scroll active channel into view
+  // Scroll active channel into view in Panel 2
   useEffect(() => {
-    if (activeFocusArea === 'grid' && currentChannel?.id) {
-      const rowEl = document.getElementById(`tvlok-row-${currentChannel.id}`);
+    if (activeFocusArea === 'channels' && currentChannel?.id) {
+      const rowEl = document.getElementById(`tvlok-channel-${currentChannel.id}`);
       if (rowEl) {
         rowEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      } else if (gridContainerRef.current) {
-        const targetTop = safeChannelIndex * ROW_HEIGHT;
-        gridContainerRef.current.scrollTop = Math.max(0, targetTop - viewportHeight / 3);
       }
     }
-  }, [safeChannelIndex, activeFocusArea, currentChannel?.id, viewportHeight]);
+  }, [safeChannelIndex, activeFocusArea, currentChannel?.id]);
 
   // Restore scroll positions on mount
   useEffect(() => {
@@ -549,19 +564,47 @@ export const TvLokLiveInterface: React.FC<TvLokLiveInterfaceProps> = ({
   // =========================================================================
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
+      // 0. EXIT CONFIRMATION DIALOG (MODAL ACTIVE)
+      if (showExitDialog) {
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+          e.preventDefault();
+          setFocusedExitButton((prev) => (prev === 'cancel' ? 'exit' : 'cancel'));
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          if (focusedExitButton === 'cancel') {
+            setShowExitDialog(false);
+          } else {
+            setShowExitDialog(false);
+            if (onExit) {
+              onExit();
+            }
+          }
+        } else if (e.key === 'Escape' || e.key === 'Backspace') {
+          e.preventDefault();
+          setShowExitDialog(false);
+        }
+        return;
+      }
+
+      // 1. LIVE CHANNEL SEARCH INPUT
       if (document.activeElement === searchInputRef.current) {
         if (e.key === 'ArrowDown') {
           e.preventDefault();
           setActiveFocusArea('categories');
           searchInputRef.current?.blur();
         } else if (e.key === 'Enter') {
+          e.preventDefault();
+          setActiveFocusArea('channels');
+          searchInputRef.current?.blur();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
           setActiveFocusArea('categories');
           searchInputRef.current?.blur();
         }
         return;
       }
 
-      // 1. NAVIGATION IN PANEL 2 (COLLAPSIBLE / EXPANDABLE HIERARCHICAL TREE)
+      // 2. PANEL 1: CATEGORIES HIERARCHICAL TREE
       if (activeFocusArea === 'categories') {
         const currentItem = panel2Items[focusedCategoryIndex];
 
@@ -588,7 +631,10 @@ export const TvLokLiveInterface: React.FC<TvLokLiveInterfaceProps> = ({
           }
         } else if (e.key === 'ArrowRight') {
           e.preventDefault();
-          if (!currentItem) return;
+          if (!currentItem) {
+            setActiveFocusArea('channels');
+            return;
+          }
 
           if (currentItem.type === 'country_group' || currentItem.type === 'other_group') {
             if (!currentItem.isExpanded) {
@@ -604,20 +650,23 @@ export const TvLokLiveInterface: React.FC<TvLokLiveInterfaceProps> = ({
               if (firstChildIdx > 0) {
                 setFocusedCategoryIndex(firstChildIdx);
               } else {
-                // Transition seamlessly to Panel 3 (channels grid)
-                setActiveFocusArea('grid');
+                setActiveFocusArea('channels');
               }
             }
           } else if (currentItem.type === 'sub_category' || currentItem.type === 'system') {
-            // Select subcategory or system category and transition seamlessly to Panel 3
+            // Select subcategory or system category and transition to Panel 2 (Channels)
             setSelectedCategoryId(currentItem.rawCategory || currentItem.id);
             persistentState.selectedCategoryId = currentItem.rawCategory || currentItem.id;
-            setActiveFocusArea('grid');
+            setFocusedChannelIndex(0);
+            setActiveFocusArea('channels');
+          } else {
+            setActiveFocusArea('channels');
           }
         } else if (e.key === 'ArrowLeft' || e.key === 'Backspace' || e.key === 'Escape') {
           e.preventDefault();
           if (!currentItem) {
-            if (withNavRail) setActiveFocusArea('rail');
+            setShowExitDialog(true);
+            setFocusedExitButton('cancel');
             return;
           }
 
@@ -626,18 +675,20 @@ export const TvLokLiveInterface: React.FC<TvLokLiveInterfaceProps> = ({
             const parentIdx = panel2Items.findIndex((r) => r.id === currentItem.countryId);
             if (parentIdx >= 0) {
               setFocusedCategoryIndex(parentIdx);
-            } else {
-              if (withNavRail) setActiveFocusArea('rail');
+              return;
             }
-          } else if ((currentItem.type === 'country_group' || currentItem.type === 'other_group') && currentItem.isExpanded) {
+          } else if (
+            (currentItem.type === 'country_group' || currentItem.type === 'other_group') &&
+            currentItem.isExpanded
+          ) {
             // Expanded country header: collapse it
             setExpandedCountries((prev) => ({ ...prev, [currentItem.id]: false }));
-          } else {
-            // Collapsed header or system item: move to Panel 1 (navigation rail)
-            if (withNavRail) {
-              setActiveFocusArea('rail');
-            }
+            return;
           }
+
+          // User is at root Category panel: trigger exit confirmation dialog!
+          setShowExitDialog(true);
+          setFocusedExitButton('cancel');
         } else if (e.key === 'Enter') {
           e.preventDefault();
           if (!currentItem) return;
@@ -649,109 +700,102 @@ export const TvLokLiveInterface: React.FC<TvLokLiveInterfaceProps> = ({
             setSelectedCategoryId(currentItem.id);
             persistentState.selectedCategoryId = currentItem.id;
           } else if (currentItem.type === 'sub_category' || currentItem.type === 'system') {
-            // Select subcategory or system category and transition seamlessly to Panel 3
+            // Select category and shift focus to Panel 2 (Channels)
             setSelectedCategoryId(currentItem.rawCategory || currentItem.id);
             persistentState.selectedCategoryId = currentItem.rawCategory || currentItem.id;
-            setActiveFocusArea('grid');
+            setFocusedChannelIndex(0);
+            setActiveFocusArea('channels');
           }
         }
         return;
       }
 
-      // 2. NAVIGATION IN PANEL 1 (MAIN APP NAVIGATION RAIL)
-      if (activeFocusArea === 'rail') {
-        if (e.key === 'ArrowRight') {
-          e.preventDefault();
-          setActiveFocusArea('categories');
-        }
-        return;
-      }
-
-      // 3. NAVIGATION IN PANEL 3 (CHANNEL / EPG GRID)
-      if (activeFocusArea === 'grid') {
+      // 3. PANEL 2: CHANNELS LIST
+      if (activeFocusArea === 'channels') {
         if (e.key === 'ArrowUp') {
           e.preventDefault();
           if (safeChannelIndex > 0) {
-            const nextIdx = safeChannelIndex - 1;
-            setFocusedChannelIndex(nextIdx);
-            const nextChannel = filteredChannels[nextIdx];
-            if (nextChannel) {
-              const nextSchedule = buildScheduleForChannel(nextChannel);
-              const matchingProg = nextSchedule.programmes.find(
-                (p) =>
-                  timelineFocusMinute >= p.startMinute &&
-                  timelineFocusMinute < p.startMinute + p.durationMinutes
-              );
-              if (matchingProg) {
-                setFocusedProgramId(matchingProg.id);
-              }
-            }
+            setFocusedChannelIndex(safeChannelIndex - 1);
           }
         } else if (e.key === 'ArrowDown') {
           e.preventDefault();
           if (safeChannelIndex < filteredChannels.length - 1) {
-            const nextIdx = safeChannelIndex + 1;
-            setFocusedChannelIndex(nextIdx);
-            const nextChannel = filteredChannels[nextIdx];
-            if (nextChannel) {
-              const nextSchedule = buildScheduleForChannel(nextChannel);
-              const matchingProg = nextSchedule.programmes.find(
-                (p) =>
-                  timelineFocusMinute >= p.startMinute &&
-                  timelineFocusMinute < p.startMinute + p.durationMinutes
-              );
-              if (matchingProg) {
-                setFocusedProgramId(matchingProg.id);
-              }
-            }
-          }
-        } else if (e.key === 'ArrowLeft') {
-          e.preventDefault();
-          if (!currentChannelSchedule) return;
-          const progs = currentChannelSchedule.programmes;
-          const curProgIdx = progs.findIndex((p) => p.id === focusedProgram?.id);
-
-          if (curProgIdx > 0) {
-            const prevProg = progs[curProgIdx - 1];
-            setFocusedProgramId(prevProg.id);
-            setTimelineFocusMinute(prevProg.startMinute + prevProg.durationMinutes / 2);
-          } else {
-            // Far-left edge: return focus to category column
-            setActiveFocusArea('categories');
+            setFocusedChannelIndex(safeChannelIndex + 1);
           }
         } else if (e.key === 'ArrowRight') {
           e.preventDefault();
-          if (!currentChannelSchedule) return;
-          const progs = currentChannelSchedule.programmes;
-          const curProgIdx = progs.findIndex((p) => p.id === focusedProgram?.id);
-
-          if (curProgIdx >= 0 && curProgIdx < progs.length - 1) {
-            const nextProg = progs[curProgIdx + 1];
-            setFocusedProgramId(nextProg.id);
-            setTimelineFocusMinute(nextProg.startMinute + nextProg.durationMinutes / 2);
-          }
+          // Shift focus to Panel 3: Player & Guide
+          setActiveFocusArea('player');
+        } else if (e.key === 'ArrowLeft' || e.key === 'Backspace' || e.key === 'Escape') {
+          e.preventDefault();
+          // Reverse focus back to Panel 1: Categories
+          setActiveFocusArea('categories');
         } else if (e.key === 'Enter') {
           e.preventDefault();
           if (currentChannel) {
             handleTuneChannel(currentChannel);
-            setPresentationMode('fullscreen');
+            // Shift focus to Player
+            setActiveFocusArea('player');
           }
         }
+        return;
+      }
+
+      // 4. PANEL 3: PLAYER & GUIDE
+      if (activeFocusArea === 'player') {
+        if (e.key === 'ArrowLeft' || e.key === 'Backspace' || e.key === 'Escape') {
+          e.preventDefault();
+          if (playbackState.presentationMode === 'fullscreen') {
+            // Exit fullscreen first
+            setPresentationMode('embedded');
+          } else {
+            // Reverse focus back to Panel 2: Channels
+            setActiveFocusArea('channels');
+          }
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          if (currentChannelSchedule && currentChannelSchedule.programmes.length > 0) {
+            const progs = currentChannelSchedule.programmes;
+            const curProgIdx = progs.findIndex((p) => p.id === focusedProgram?.id);
+            if (curProgIdx > 0) {
+              setFocusedProgramId(progs[curProgIdx - 1].id);
+            }
+          }
+        } else if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          if (currentChannelSchedule && currentChannelSchedule.programmes.length > 0) {
+            const progs = currentChannelSchedule.programmes;
+            const curProgIdx = progs.findIndex((p) => p.id === focusedProgram?.id);
+            if (curProgIdx >= 0 && curProgIdx < progs.length - 1) {
+              setFocusedProgramId(progs[curProgIdx + 1].id);
+            }
+          }
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          // Toggle fullscreen playback
+          setPresentationMode(
+            playbackState.presentationMode === 'fullscreen' ? 'embedded' : 'fullscreen'
+          );
+        }
+        return;
       }
     },
     [
+      showExitDialog,
+      focusedExitButton,
+      onExit,
       activeFocusArea,
       focusedCategoryIndex,
       panel2Items,
       expandedCountries,
       filteredChannels,
       safeChannelIndex,
+      currentChannel,
       currentChannelSchedule,
       focusedProgram,
-      timelineFocusMinute,
       handleTuneChannel,
       setPresentationMode,
-      withNavRail,
+      playbackState.presentationMode,
     ]
   );
 
@@ -783,9 +827,12 @@ export const TvLokLiveInterface: React.FC<TvLokLiveInterfaceProps> = ({
   }, [currentDateTime]);
 
   return (
-    <div className="flex h-screen w-screen bg-[#070a0f] text-slate-100 font-sans select-none overflow-hidden">
+    <div
+      id="livetv-root-container"
+      className="flex h-screen w-screen bg-[#070a0f] text-slate-100 font-sans select-none overflow-hidden relative"
+    >
       {/* ===================================================================== */}
-      {/* PANEL 1: MAIN APPLICATION NAVIGATION (PRESERVED APPLICATION RAIL)      */}
+      {/* OPTIONAL APPLICATION NAVIGATION RAIL                                  */}
       {/* ===================================================================== */}
       {withNavRail && (
         <aside
@@ -804,14 +851,28 @@ export const TvLokLiveInterface: React.FC<TvLokLiveInterfaceProps> = ({
       )}
 
       {/* ===================================================================== */}
-      {/* PANEL 2: LIVE TV CATEGORIES / PLAYLIST GROUPS (DYNAMIC PROVIDER DATA) */}
+      {/* THREE-PANEL RESPONSIVE CSS GRID: 18% 27% 55%                          */}
       {/* ===================================================================== */}
-      <nav
-        id="panel-2-categories"
-        className={`w-64 md:w-72 lg:w-80 shrink-0 bg-[#090d16] border-r border-white/10 flex flex-col z-20 transition-all ${
-          activeFocusArea === 'categories' ? 'ring-1 ring-cyan-400/50 shadow-2xl shadow-cyan-500/10' : ''
-        }`}
+      <div
+        id="livetv-three-panel-grid"
+        className="flex-1 h-full w-full overflow-hidden"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(180px, 18%) minmax(240px, 27%) minmax(380px, 55%)',
+          gridTemplateRows: '100%',
+          height: '100%',
+          width: '100%',
+        }}
       >
+        {/* ===================================================================== */}
+        {/* PANEL 1: CATEGORIES HIERARCHICAL TREE (18%)                           */}
+        {/* ===================================================================== */}
+        <nav
+          id="panel-categories"
+          className={`h-full flex flex-col min-w-0 bg-[#090d16] border-r border-white/10 overflow-hidden relative transition-all ${
+            activeFocusArea === 'categories' ? 'ring-1 ring-cyan-400/50 shadow-2xl shadow-cyan-500/10' : ''
+          }`}
+        >
         {/* Search live channels input */}
         <div className="p-3 border-b border-white/10 bg-[#0c121e]/80 shrink-0">
           <div
@@ -902,7 +963,9 @@ export const TvLokLiveInterface: React.FC<TvLokLiveInterfaceProps> = ({
                         <ChevronRight className="w-4 h-4 text-slate-400" />
                       )}
                     </span>
-                    {row.type === 'other_group' ? (
+                    {row.flag ? (
+                      <span className="text-sm shrink-0 leading-none">{row.flag}</span>
+                    ) : row.type === 'other_group' ? (
                       <Layers className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                     ) : (
                       <Globe className="w-3.5 h-3.5 text-cyan-400/80 shrink-0" />
@@ -1019,303 +1082,360 @@ export const TvLokLiveInterface: React.FC<TvLokLiveInterfaceProps> = ({
       </nav>
 
       {/* ===================================================================== */}
-      {/* PANEL 3: PREVIEW + PROGRAM INFORMATION + EPG GUIDE                    */}
+      {/* PANEL 2: CHANNELS LIST (27%)                                          */}
       {/* ===================================================================== */}
-      <main className="flex-1 flex flex-col min-w-0 bg-[#070a0f] overflow-hidden relative">
-        {/* Top Split View: [Live Preview] + [Program / Channel Info] */}
-        <div className="h-56 md:h-64 lg:h-72 border-b border-white/10 bg-[#0a0f1a] flex shrink-0 divide-x divide-white/10">
-          {/* Top-Left: Embedded Live Video Preview */}
-          <div className="w-80 md:w-96 lg:w-[440px] shrink-0 bg-black relative flex flex-col justify-center overflow-hidden">
-            {currentChannel ? (
-              <VideoPlayerShell
-                channel={currentChannel}
-                isLive={true}
-                presentationMode="embedded"
-                onToggleFullscreen={() => setPresentationMode('fullscreen')}
-                className="w-full h-full"
-              />
-            ) : (
-              <div className="flex flex-col items-center justify-center h-full text-slate-600 space-y-2">
-                <Tv className="w-10 h-10 text-slate-700" />
-                <span className="text-xs font-mono">No channel selected</span>
-              </div>
-            )}
-
-            {/* Live Signal Badge */}
-            {isChannelPlaying && (
-              <div className="absolute top-2 left-2 z-20 flex items-center gap-1.5 px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/60 text-[10px] font-mono font-bold text-emerald-400 shadow-md">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                <span>LIVE</span>
-              </div>
-            )}
+      <section
+        id="panel-channels"
+        className={`h-full flex flex-col min-w-0 bg-[#080c15] border-r border-white/10 overflow-hidden relative transition-all ${
+          activeFocusArea === 'channels'
+            ? 'ring-1 ring-cyan-400/50 shadow-2xl shadow-cyan-500/10'
+            : ''
+        }`}
+      >
+        {/* Panel 2 Header */}
+        <div className="p-3.5 border-b border-white/10 bg-[#0c121e]/90 shrink-0 flex items-center justify-between">
+          <div className="min-w-0 flex items-center gap-2">
+            <Tv className="w-4 h-4 text-cyan-400 shrink-0" />
+            <h2 className="text-xs font-bold text-white uppercase tracking-wider truncate">
+              {panel2Items.find((r) => r.id === selectedCategoryId || r.rawCategory === selectedCategoryId)
+                ?.displayLabel || 'Channels'}
+            </h2>
           </div>
+          <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-cyan-950/60 border border-cyan-800/60 text-cyan-300 font-semibold shrink-0">
+            {filteredChannels.length}
+          </span>
+        </div>
 
-          {/* Top-Right: Program & Channel Metadata Card */}
-          <div className="flex-1 p-4 md:p-5 flex flex-col justify-between overflow-y-auto bg-gradient-to-br from-[#0c1322] to-[#080d17]">
-            {currentChannel ? (
-              <>
-                <div className="space-y-1.5">
-                  {/* Category / Provider Breadcrumb */}
-                  <div className="flex items-center gap-2 text-xs font-mono text-cyan-400 font-bold uppercase tracking-wider">
-                    <span>{currentChannel.groupTitle || currentChannel.category || 'General'}</span>
-                    <span className="text-slate-600">•</span>
-                    <span className="text-slate-400 font-normal">CH {currentChannel.channelNumber}</span>
-                  </div>
+        {/* Channels Scrollable List */}
+        <div
+          ref={channelListRef}
+          className="flex-1 overflow-y-auto divide-y divide-white/[0.04] scrollbar-thin scrollbar-thumb-slate-800"
+        >
+          {filteredChannels.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-48 text-center p-6 text-slate-500 space-y-2">
+              <Tv className="w-8 h-8 text-slate-600" />
+              <span className="text-xs">No channels in this category</span>
+            </div>
+          ) : (
+            filteredChannels.map((channel, idx) => {
+              const isFocused = activeFocusArea === 'channels' && safeChannelIndex === idx;
+              const isSelected = safeChannelIndex === idx;
+              const isPlaying = playbackState.currentChannel?.id === channel.id;
+              const isFav = favorites.has(channel.id);
 
-                  {/* Channel Name */}
-                  <h2 className="text-lg md:text-xl font-black text-white tracking-tight flex items-center gap-2.5">
-                    <span>{currentChannel.name}</span>
-                    <button
-                      onClick={(e) => handleToggleFavorite(currentChannel.id, e)}
-                      className="text-slate-500 hover:text-amber-400 transition-colors"
-                      title={favorites.has(currentChannel.id) ? 'Remove Favorite' : 'Mark as Favorite'}
-                    >
-                      <Star
-                        className={`w-4 h-4 ${
-                          favorites.has(currentChannel.id) ? 'text-amber-400 fill-amber-400' : ''
-                        }`}
-                      />
-                    </button>
-                  </h2>
+              return (
+                <div
+                  key={channel.id}
+                  id={`tvlok-channel-${channel.id}`}
+                  onClick={() => {
+                    setFocusedChannelIndex(idx);
+                    setActiveFocusArea('channels');
+                    handleTuneChannel(channel);
+                  }}
+                  onDoubleClick={() => {
+                    setFocusedChannelIndex(idx);
+                    setActiveFocusArea('player');
+                    setPresentationMode('fullscreen');
+                  }}
+                  className={`px-3 py-2.5 flex items-center justify-between cursor-pointer transition-all ${
+                    isFocused
+                      ? 'bg-[#15233c] text-white border-l-4 border-cyan-400 ring-1 ring-cyan-400/40 shadow-lg shadow-cyan-500/20'
+                      : isSelected
+                      ? 'bg-[#0d1626] text-cyan-200 border-l-2 border-cyan-500/60'
+                      : 'border-l-2 border-transparent text-slate-300 hover:bg-white/[0.04]'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    {/* Channel Number */}
+                    <span className="font-mono text-[11px] text-slate-400 font-bold shrink-0 w-6">
+                      {channel.channelNumber || idx + 1}
+                    </span>
 
-                  {/* Program Title */}
-                  <div className="text-sm md:text-base font-bold text-slate-200">
-                    {focusedProgram ? focusedProgram.title : 'No program information available'}
-                  </div>
-
-                  {/* Program Synopsis */}
-                  <p className="text-xs text-slate-400 line-clamp-2 md:line-clamp-3 leading-relaxed">
-                    {focusedProgram?.description ||
-                      'Continuous live scheduled television transmission streamed from provider feed.'}
-                  </p>
-                </div>
-
-                {/* Progress Bar & Timing Details */}
-                {focusedProgram && (
-                  <div className="mt-3 pt-3 border-t border-white/10 space-y-2">
-                    <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
-                      <span className="font-semibold text-slate-300">
-                        {focusedProgram.start} – {focusedProgram.stop}
-                      </span>
-                      {focusedProgram.remainingMinutes !== undefined && (
-                        <span className="text-cyan-400 font-bold">
-                          {focusedProgram.remainingMinutes}m remaining
-                        </span>
+                    {/* Logo or Icon */}
+                    <div className="w-7 h-7 rounded-lg bg-[#06080e] border border-white/10 flex items-center justify-center shrink-0 overflow-hidden">
+                      {channel.logo ? (
+                        <img
+                          src={channel.logo}
+                          alt={channel.name}
+                          className="w-5 h-5 object-contain"
+                          onError={(e) => {
+                            (e.target as HTMLElement).style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <Tv className="w-3.5 h-3.5 text-cyan-400" />
                       )}
                     </div>
 
-                    <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-cyan-500 to-emerald-400 rounded-full transition-all duration-500"
-                        style={{ width: `${focusedProgram.progressPercent || 50}%` }}
-                      />
+                    {/* Channel Name & Category */}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold truncate text-slate-100">
+                          {channel.name}
+                        </span>
+                        {isPlaying && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                        )}
+                      </div>
+                      <div className="text-[10px] text-slate-400 truncate">
+                        {channel.groupTitle || channel.category || 'Live Stream'}
+                      </div>
                     </div>
                   </div>
-                )}
-              </>
+
+                  {/* Favorite Toggle Button */}
+                  <button
+                    type="button"
+                    onClick={(e) => handleToggleFavorite(channel.id, e)}
+                    className="ml-2 p-1 text-slate-500 hover:text-amber-400 transition-colors shrink-0"
+                    title={isFav ? 'Remove Favorite' : 'Mark Favorite'}
+                  >
+                    <Star
+                      className={`w-3.5 h-3.5 ${
+                        isFav ? 'text-amber-400 fill-amber-400' : ''
+                      }`}
+                    />
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </section>
+
+      {/* ===================================================================== */}
+      {/* PANEL 3: PLAYER & GUIDE (55%)                                         */}
+      {/* ===================================================================== */}
+      <main
+        id="panel-player"
+        className={`h-full flex flex-col min-w-0 bg-[#070a0f] overflow-hidden relative transition-all ${
+          activeFocusArea === 'player'
+            ? 'ring-1 ring-cyan-400/40 shadow-2xl shadow-cyan-500/10'
+            : ''
+        }`}
+      >
+        {/* Top: Video Player */}
+        <div className="h-60 md:h-64 lg:h-72 shrink-0 bg-black relative flex flex-col justify-center overflow-hidden border-b border-white/10">
+          {currentChannel ? (
+            <VideoPlayerShell
+              id="live-tv-player"
+              channel={currentChannel}
+              forceMode="embedded"
+              mode="embedded"
+              autoPlay={true}
+              showControls={true}
+              isLivePreview={true}
+              className="w-full h-full"
+            />
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full text-slate-600 space-y-2">
+              <Tv className="w-10 h-10 text-slate-700" />
+              <span className="text-xs font-mono">Select a channel to play</span>
+            </div>
+          )}
+
+          {/* Live Indicator Overlay */}
+          {isChannelPlaying && (
+            <div className="absolute top-2.5 left-2.5 z-20 flex items-center gap-1.5 px-2.5 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/60 text-[10px] font-mono font-bold text-emerald-400 shadow-md">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+              <span>LIVE</span>
+            </div>
+          )}
+        </div>
+
+        {/* Middle: Channel & Program Info Card */}
+        <div className="p-4 border-b border-white/10 bg-gradient-to-r from-[#0c1322] to-[#080d17] shrink-0 space-y-2">
+          {currentChannel ? (
+            <>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs font-mono text-cyan-400 font-bold uppercase tracking-wider">
+                  <span>{currentChannel.groupTitle || currentChannel.category || 'General'}</span>
+                  <span className="text-slate-600">•</span>
+                  <span className="text-slate-400 font-normal">
+                    CH {currentChannel.channelNumber || safeChannelIndex + 1}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={(e) => handleToggleFavorite(currentChannel.id, e)}
+                  className="text-slate-500 hover:text-amber-400 transition-colors"
+                >
+                  <Star
+                    className={`w-4 h-4 ${
+                      favorites.has(currentChannel.id) ? 'text-amber-400 fill-amber-400' : ''
+                    }`}
+                  />
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between gap-4">
+                <h2 className="text-base md:text-lg font-black text-white tracking-tight truncate">
+                  {currentChannel.name}
+                </h2>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setPresentationMode('fullscreen')}
+                    className="px-2.5 py-1 rounded bg-white/10 hover:bg-white/20 text-white text-xs font-medium transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    <Maximize2 className="w-3.5 h-3.5" />
+                    <span>Fullscreen</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="text-xs md:text-sm font-semibold text-slate-200">
+                {focusedProgram ? focusedProgram.title : 'Live Television Broadcast'}
+              </div>
+
+              {focusedProgram && (
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
+                    <span>
+                      {focusedProgram.start} – {focusedProgram.stop}
+                    </span>
+                    {focusedProgram.remainingMinutes !== undefined && (
+                      <span className="text-cyan-400 font-bold">
+                        {focusedProgram.remainingMinutes}m remaining
+                      </span>
+                    )}
+                  </div>
+                  <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-cyan-500 to-emerald-400 rounded-full transition-all duration-500"
+                      style={{ width: `${focusedProgram.progressPercent || 50}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="text-xs text-slate-500">No channel active</div>
+          )}
+        </div>
+
+        {/* Bottom: Channel Schedule / EPG Guide */}
+        <div className="flex-1 flex flex-col min-h-0 bg-[#070a0f]">
+          <div className="px-4 py-2 border-b border-white/10 bg-[#0a0f1c] flex items-center justify-between shrink-0">
+            <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5 uppercase tracking-wider">
+              <Clock className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Today's Schedule</span>
+            </span>
+            <span className="text-[11px] font-mono text-slate-400">{formattedDateTime}</span>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-3 space-y-2 scrollbar-thin scrollbar-thumb-slate-800">
+            {currentChannelSchedule && currentChannelSchedule.programmes.length > 0 ? (
+              currentChannelSchedule.programmes.map((prog) => {
+                const isCurrent = prog.isLive;
+                const isProgFocused = focusedProgram?.id === prog.id;
+
+                return (
+                  <div
+                    key={prog.id}
+                    onClick={() => setFocusedProgramId(prog.id)}
+                    className={`p-3 rounded-xl border transition-all cursor-pointer ${
+                      isProgFocused && activeFocusArea === 'player'
+                        ? 'bg-cyan-950/70 border-cyan-400 text-white ring-1 ring-cyan-400 shadow-md shadow-cyan-500/20'
+                        : isCurrent
+                        ? 'bg-[#10192b] border-cyan-500/40 text-slate-200'
+                        : 'bg-[#090e18] border-white/5 hover:border-white/20 text-slate-400'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        {isCurrent && (
+                          <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/50 text-emerald-400 text-[10px] font-mono font-bold">
+                            NOW
+                          </span>
+                        )}
+                        <span className="text-xs font-bold text-white truncate">
+                          {prog.title}
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-mono text-slate-400 shrink-0">
+                        {prog.start} – {prog.stop} ({prog.durationMinutes}m)
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400 line-clamp-2">
+                      {prog.description || 'Program guide details provided by television source.'}
+                    </p>
+                  </div>
+                );
+              })
             ) : (
-              <div className="flex flex-col items-center justify-center h-full text-slate-500 text-xs">
-                Select a channel from the guide to view broadcast information.
+              <div className="flex items-center justify-center h-32 text-xs text-slate-500">
+                No upcoming program guide available for this channel
               </div>
             )}
           </div>
         </div>
-
-        {/* Date / Time Header & Horizontal Timeline Bar */}
-        <div className="h-10 bg-[#0d1424] border-b border-white/10 flex items-center shrink-0 z-10">
-          {/* Pinned Left: Local Date & Current Time Clock */}
-          <div
-            style={{ width: `${CHANNEL_COL_WIDTH}px` }}
-            className="shrink-0 px-4 h-full flex items-center justify-between border-r border-white/10 bg-[#090e1a] text-xs font-mono font-bold text-cyan-300 shadow-sm"
-          >
-            <div className="flex items-center gap-1.5">
-              <Calendar className="w-3.5 h-3.5 text-cyan-400" />
-              <span>{formattedDateTime}</span>
-            </div>
-          </div>
-
-          {/* Horizontally Scrolling Timeline Header */}
-          <div className="flex-1 overflow-hidden relative h-full flex items-center">
-            <div
-              className="flex items-center h-full"
-              style={{
-                transform: `translateX(-${persistentState.scrollLeft}px)`,
-                width: `${TIME_SLOTS.length * SLOT_WIDTH_PX}px`,
-              }}
-            >
-              {TIME_SLOTS.map((slot, idx) => (
-                <div
-                  key={slot}
-                  style={{ width: `${SLOT_WIDTH_PX}px` }}
-                  className="shrink-0 text-center text-xs font-mono font-semibold text-slate-400 border-r border-white/5 py-1"
-                >
-                  {slot}
-                </div>
-              ))}
-            </div>
-
-            {/* Current Virtual Time Marker */}
-            <div
-              className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20 pointer-events-none shadow-[0_0_8px_rgba(239,68,68,0.8)]"
-              style={{
-                left: `${CURRENT_TIME_MINUTES * PIXELS_PER_MINUTE - persistentState.scrollLeft}px`,
-              }}
-            >
-              <div className="w-2 h-2 rounded-full bg-red-500 -translate-x-[3px] -translate-y-0.5" />
-            </div>
-          </div>
-        </div>
-
-        {/* Channel Rows & EPG Matrix (Virtualized for 10,000+ Channels) */}
-        <div
-          ref={gridContainerRef}
-          onScroll={handleGridScroll}
-          className="flex-1 overflow-auto relative bg-[#070a0f] scrollbar-thin scrollbar-thumb-slate-800"
-        >
-          {filteredChannels.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64 text-center p-8 space-y-3">
-              <Tv className="w-12 h-12 text-slate-600" />
-              <div className="text-sm font-bold text-slate-400">No channels found</div>
-              <p className="text-xs text-slate-500 max-w-sm">
-                Try selecting "All Playlists" or clearing your search query.
-              </p>
-            </div>
-          ) : (
-            <>
-              {topSpacerHeight > 0 && (
-                <div style={{ height: `${topSpacerHeight}px`, width: '100%', flexShrink: 0 }} />
-              )}
-              {visibleRows.map(({ scheduleItem, rowIdx }) => {
-                const { channel, programmes } = scheduleItem;
-                const isChannelFocused = safeChannelIndex === rowIdx && activeFocusArea === 'grid';
-                const isPlayingThis = playbackState.currentChannel?.id === channel.id;
-
-                return (
-                  <div
-                    key={channel.id}
-                    id={`tvlok-row-${channel.id}`}
-                    style={{ height: `${ROW_HEIGHT}px` }}
-                    className={`flex items-stretch border-b border-white/5 transition-colors ${
-                      isChannelFocused ? 'bg-[#152033]' : 'hover:bg-[#0c121e]'
-                    }`}
-                  >
-                    {/* Fixed Channel Column (Sticky Left) */}
-                    <div
-                      style={{ width: `${CHANNEL_COL_WIDTH}px` }}
-                      onClick={() => {
-                        setFocusedChannelIndex(rowIdx);
-                        setActiveFocusArea('grid');
-                        handleTuneChannel(channel);
-                      }}
-                      className={`sticky left-0 z-20 shrink-0 px-3 py-2 border-r border-white/10 flex items-center justify-between cursor-pointer transition-all ${
-                        isChannelFocused
-                          ? 'bg-[#152030] text-white border-l-4 border-l-cyan-400 shadow-md shadow-cyan-500/20'
-                          : 'bg-[#0d1320] hover:bg-[#121927] text-slate-300'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                        {/* Channel Number */}
-                        <span className="font-mono text-xs text-slate-400 font-bold shrink-0 w-7">
-                          {channel.channelNumber || rowIdx + 1}
-                        </span>
-
-                        {/* Channel Logo with Clean Fallback */}
-                        <div className="w-8 h-8 rounded-lg bg-[#080b11] border border-white/10 flex items-center justify-center text-xs font-bold text-cyan-400 shrink-0 overflow-hidden">
-                          {channel.logo ? (
-                            <img
-                              src={channel.logo}
-                              alt={channel.name}
-                              className="w-6 h-6 object-contain"
-                              onError={(e) => {
-                                (e.target as HTMLElement).style.display = 'none';
-                              }}
-                            />
-                          ) : (
-                            <Tv className="w-4 h-4 text-cyan-400" />
-                          )}
-                        </div>
-
-                        {/* Channel Name */}
-                        <div className="min-w-0 flex-1">
-                          <div className="text-xs font-bold text-white truncate flex items-center gap-1.5">
-                            <span className="truncate">{channel.name}</span>
-                            {isPlayingThis && (
-                              <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 animate-ping" />
-                            )}
-                          </div>
-                          <div className="text-[10px] text-slate-400 truncate">
-                            {channel.groupTitle || channel.category || 'General'}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Favorite Star Button */}
-                      <button
-                        onClick={(e) => handleToggleFavorite(channel.id, e)}
-                        className="p-1 hover:bg-white/10 rounded text-slate-500 hover:text-amber-400 shrink-0"
-                      >
-                        <Star
-                          className={`w-3.5 h-3.5 ${
-                            favorites.has(channel.id) ? 'text-amber-400 fill-amber-400' : ''
-                          }`}
-                        />
-                      </button>
-                    </div>
-
-                    {/* Horizontal EPG Program Cells */}
-                    <div
-                      className="flex items-center px-1 py-1 gap-1 h-full"
-                      style={{ width: `${TIME_SLOTS.length * SLOT_WIDTH_PX}px` }}
-                    >
-                      {programmes.map((prog) => {
-                        const widthPx = Math.max(80, prog.durationMinutes * PIXELS_PER_MINUTE - 4);
-                        const isProgFocused = isChannelFocused && focusedProgram?.id === prog.id;
-
-                        return (
-                          <div
-                            key={prog.id}
-                            style={{ width: `${widthPx}px` }}
-                            onClick={() => {
-                              setFocusedChannelIndex(rowIdx);
-                              setFocusedProgramId(prog.id);
-                              setActiveFocusArea('grid');
-                              handleTuneChannel(channel);
-                            }}
-                            className={`h-12 shrink-0 px-2.5 py-1.5 rounded-md border flex flex-col justify-between cursor-pointer transition-all ${
-                              isProgFocused
-                                ? 'bg-cyan-950/80 border-cyan-400 text-white shadow-md shadow-cyan-500/20 ring-1 ring-cyan-400'
-                                : prog.isLive
-                                ? 'bg-[#0f172a] border-white/10 hover:border-white/30 text-slate-200'
-                                : 'bg-[#090d16] border-white/5 hover:border-white/20 text-slate-400'
-                            }`}
-                          >
-                            <div className="text-xs font-semibold truncate flex items-center gap-1">
-                              {prog.isLive && (
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-                              )}
-                              <span className="truncate">{prog.title}</span>
-                            </div>
-
-                            <div className="text-[10px] text-slate-500 font-mono flex items-center justify-between">
-                              <span>
-                                {prog.start} – {prog.stop}
-                              </span>
-                              <span>{prog.durationMinutes}m</span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-              {bottomSpacerHeight > 0 && (
-                <div style={{ height: `${bottomSpacerHeight}px`, width: '100%', flexShrink: 0 }} />
-              )}
-            </>
-          )}
-        </div>
       </main>
     </div>
-  );
+
+    {/* EXIT CONFIRMATION DIALOG (MODAL OVERLAY) */}
+    {showExitDialog && (
+      <div
+        id="exit-dialog-overlay"
+        className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+        onClick={() => setShowExitDialog(false)}
+      >
+        <div
+          id="exit-dialog-card"
+          className="bg-[#0e1626] border border-white/15 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-5 text-center"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="w-12 h-12 rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-400 flex items-center justify-center mx-auto">
+            <LogOut className="w-6 h-6" />
+          </div>
+
+          <div className="space-y-1.5">
+            <h3 className="text-lg font-bold text-white">Exit Live TV?</h3>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Are you sure you want to leave Live TV and return to the main dashboard? Your active broadcast stream will stop.
+            </p>
+          </div>
+
+          <div className="flex items-center justify-center gap-3 pt-2">
+            <button
+              id="exit-dialog-cancel-btn"
+              type="button"
+              onClick={() => setShowExitDialog(false)}
+              className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                focusedExitButton === 'cancel'
+                  ? 'bg-slate-700 text-white ring-2 ring-cyan-400 shadow-lg shadow-cyan-500/20 scale-105'
+                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              }`}
+            >
+              Cancel
+            </button>
+            <button
+              id="exit-dialog-exit-btn"
+              type="button"
+              onClick={() => {
+                setShowExitDialog(false);
+                if (onExit) onExit();
+              }}
+              className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                focusedExitButton === 'exit'
+                  ? 'bg-rose-600 text-white ring-2 ring-rose-400 shadow-lg shadow-rose-500/30 scale-105'
+                  : 'bg-rose-950/70 border border-rose-800 text-rose-300 hover:bg-rose-900'
+              }`}
+            >
+              Exit
+            </button>
+          </div>
+
+          <div className="text-[10px] text-slate-500 font-mono flex items-center justify-center gap-2 pt-2 border-t border-white/5">
+            <span>[ ◀ / ▶ ] Choose</span>
+            <span>•</span>
+            <span>[ Enter ] Confirm</span>
+            <span>•</span>
+            <span>[ Back ] Cancel</span>
+          </div>
+        </div>
+      </div>
+    )}
+  </div>
+);
 };

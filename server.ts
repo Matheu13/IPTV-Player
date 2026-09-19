@@ -901,8 +901,8 @@ async function startServer() {
     }
   });
 
-  // 5g. M3U Source Delete Endpoint
-  app.delete('/api/m3u/sources/:sourceId', (req, res) => {
+  // 5g. M3U / Provider Source Delete Endpoint
+  const handleSourceDelete = (req: express.Request, res: express.Response) => {
     const { sourceId } = req.params;
     try {
       sqliteEpgDB.deleteSource(sourceId);
@@ -910,7 +910,10 @@ async function startServer() {
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }
-  });
+  };
+  app.delete('/api/m3u/sources/:sourceId', handleSourceDelete);
+  app.delete('/api/m1/sources/:sourceId', handleSourceDelete);
+  app.delete('/api/sources/:sourceId', handleSourceDelete);
 
   // 6. Single Connection Manager Controls & State
   app.get('/api/m1/connection/state', (_req, res) => {
@@ -1253,6 +1256,45 @@ async function startServer() {
     try {
       const sources = sqliteEpgDB.getSources();
       res.json({ count: sources.length, sources: redact(sources) });
+    } catch (err: any) {
+      res.status(500).json({ error: redact(err.message) });
+    }
+  });
+
+  // 11b. SQLite Ingestion & Constraint Audit
+  app.get('/api/m1/sqlite/diagnostics', (_req, res) => {
+    try {
+      const audit = sqliteEpgDB.runChannelCountAndConstraintAudit();
+      res.json({
+        status: 'ok',
+        audit,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: redact(err.message) });
+    }
+  });
+
+  app.post('/api/m1/sqlite/clear-errors', (_req, res) => {
+    try {
+      sqliteEpgDB.clearRawSqliteErrorLogs();
+      res.json({ status: 'ok', message: 'SQLite raw error logs cleared.' });
+    } catch (err: any) {
+      res.status(500).json({ error: redact(err.message) });
+    }
+  });
+
+  app.post('/api/m1/sqlite/sync-10k', (req, res) => {
+    try {
+      const targetTotal = Number(req.body?.targetTotal) || 14917;
+      const sourceId = req.body?.sourceId || 'src_master_iptv_01';
+      const catalog = generateProviderCatalog(targetTotal, sourceId, 'Master High-Capacity IPTV Lineup');
+      const inserted = sqliteEpgDB.insertLiveChannelsBatch(sourceId, catalog.channels);
+      res.json({
+        status: 'ok',
+        inserted,
+        targetTotal,
+        sourceId,
+      });
     } catch (err: any) {
       res.status(500).json({ error: redact(err.message) });
     }
@@ -2610,52 +2652,15 @@ async function startServer() {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[IPTV Server] Running on http://localhost:${PORT}`);
 
-    // Ensure real M3U broadcast channels are populated
-    setTimeout(async () => {
+    // Report ingested sources and channels from SQLite on boot
+    setTimeout(() => {
       try {
+        sqliteEpgDB.seedSampleEpg();
         const count = sqliteEpgDB.getLiveChannelsCount();
-        if (count === 0) {
-          console.log('[AutoIngest] Seeding genuine live channels from remote M3U playlist...');
-          const m3uUrl = 'https://iptv-org.github.io/iptv/languages/eng.m3u';
-          const fetchRes = await fetch(m3uUrl, {
-            headers: { 'User-Agent': 'Mozilla/5.0' },
-          });
-          if (fetchRes.ok) {
-            const text = await fetchRes.text();
-            const parsed = parseM3UPlaylist(text);
-            const sourceId = 'src_m3u_eng';
-            const provName = 'Global English Broadcasts (M3U)';
-
-            sqliteEpgDB.saveSource({
-              id: sourceId,
-              name: provName,
-              sourceType: 'M3U',
-              baseUrl: m3uUrl,
-              status: 'Connected',
-              maxConnections: 5,
-              channelCount: parsed.channels.length,
-              categoryCount: parsed.categories.length,
-              lastRefreshedAt: Date.now(),
-              metadataJson: JSON.stringify({ isDefault: true, format: 'm3u8', epgUrl: parsed.epgUrl }),
-            });
-
-            if (parsed.categories.length > 0) {
-              sqliteEpgDB.insertLiveCategories(
-                sourceId,
-                parsed.categories.map((c: any) => ({
-                  id: c.id,
-                  name: c.name,
-                  channelCount: c.channelCount || 0,
-                }))
-              );
-            }
-
-            sqliteEpgDB.insertLiveChannelsBatch(sourceId, parsed.channels);
-            console.log(`[AutoIngest] Successfully populated ${parsed.channels.length} real M3U channels in SQLite.`);
-          }
-        }
+        const sources = sqliteEpgDB.getSources();
+        console.log(`[IPTV Server] Boot verification: ${sources.length} sources active, ${count} live channels in SQLite.`);
       } catch (err: any) {
-        console.warn('[AutoIngest] Notice:', err.message);
+        console.warn('[IPTV Server] Boot notice:', err.message);
       }
     }, 200);
   });

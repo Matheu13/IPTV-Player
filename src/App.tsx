@@ -56,6 +56,7 @@ import { SourceMonitorDashboard } from './components/SourceMonitorDashboard';
 import { Milestone37to38TestSuite } from './components/Milestone37to38TestSuite';
 import { Milestone42TestSuite } from './components/Milestone42TestSuite';
 import { Phase48SourceValidation } from './components/Phase48SourceValidation';
+import { IngestionValidationTool } from './components/IngestionValidationTool';
 import { SpatialAudioSurface } from './components/SpatialAudioSurface';
 import { MilestoneUiRequirementsTestSuite } from './components/MilestoneUiRequirementsTestSuite';
 import { UnifiedIptvSurface } from './components/UnifiedIptvSurface';
@@ -103,6 +104,7 @@ import {
 
 type Tab =
   | 'phase48-source-validation'
+  | 'ingestion-validation'
   | 'source-monitor'
   | 'm37-38-test-suite'
   | 'm42-test-suite'
@@ -180,6 +182,7 @@ interface TabConfig {
 
 const TABS: TabConfig[] = [
   { id: 'phase48-source-validation', name: 'Phase 48: 14.9k Ingestion', category: 'Milestones', icon: Activity, badge: 'P48', description: 'Validate 14,900+ channels ingestion & metadata' },
+  { id: 'ingestion-validation', name: 'Ingestion Validation Tool', category: 'Ingestion & Data', icon: ShieldCheck, badge: 'Matrix', description: 'Dry-run parse 10k+ subset, delimiter inspection & error reporting' },
   { id: 'source-monitor', name: 'Source Monitor Dashboard', category: 'Ingestion & Data', icon: Activity, badge: 'Live', description: 'Monitor upstream provider health, latency & QoS' },
   { id: 'm37-38-test-suite', name: 'M37-38: Source Monitor', category: 'Milestones', icon: Activity, badge: 'M37-38', description: 'Source health watchdog & automatic failover' },
   { id: 'm42-test-suite', name: 'M42: Adaptive P2P Mesh', category: 'Milestones', icon: Share2, badge: 'M42', description: 'P2P WebRTC CDN mesh bandwidth sharing' },
@@ -378,6 +381,7 @@ export default function App() {
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
         {activeTab === 'phase48-source-validation' && <Phase48SourceValidation />}
+        {activeTab === 'ingestion-validation' && <IngestionValidationTool />}
         {activeTab === 'source-monitor' && <SourceMonitorDashboard onTuneChannel={handleTuneChannel} />}
         {activeTab === 'm37-38-test-suite' && <Milestone37to38TestSuite />}
         {activeTab === 'm42-test-suite' && <Milestone42TestSuite />}

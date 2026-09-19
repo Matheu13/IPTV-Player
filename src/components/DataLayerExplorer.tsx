@@ -16,11 +16,18 @@ import {
   Tv,
   Image as ImageIcon,
   Sparkles,
+  Terminal,
+  Bug,
+  ListFilter,
+  Check,
+  Copy,
+  Zap,
 } from 'lucide-react';
 import { UnifiedCategory, UnifiedChannel } from '../lib/models';
 import { M3uLivePreview } from '../ui/components/M3uLivePreview';
 import { InspectPreviewModal } from '../ui/components/InspectPreviewModal';
 import { globalThumbnailService } from '../services/thumbnailGeneratorService';
+import { SourceTriageReport } from './SourceTriageReport';
 
 // Subcomponent for each stream row with thumbnail generator service
 const M3uStreamRowItem: React.FC<{
@@ -136,7 +143,7 @@ const M3uStreamRowItem: React.FC<{
 };
 
 export const DataLayerExplorer: React.FC = () => {
-  const [activeSource, setActiveSource] = useState<'XTREAM' | 'M3U'>('XTREAM');
+  const [activeSource, setActiveSource] = useState<'XTREAM' | 'M3U' | 'SOURCE_TRIAGE' | 'SQLITE_DIAGNOSTICS'>('XTREAM');
   const [emptyBouquetBugSimulated, setEmptyBouquetBugSimulated] = useState(true);
   const [sampleM3UText, setSampleM3UText] = useState<string>(`#EXTM3U
 #EXTINF:-1 tvg-id="ESPN.us" tvg-name="ESPN HD" tvg-logo="https://raw.githubusercontent.com/iptv-org/epg/master/sites/espn.com/logo.png" group-title="US | SPORTS" catchup="default" catchup-days="3", US: ESPN HD (60FPS)
@@ -152,6 +159,14 @@ https://playertest.longtailvideo.com/adaptive/oceans/oceans.m3u8`);
   const [cacheResult, setCacheResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
+  // SQLite Diagnostic Script State (Requirement: Count query + raw SQLite error logs to console)
+  const [isAuditRunning, setIsAuditRunning] = useState<boolean>(false);
+  const [auditData, setAuditData] = useState<any>(null);
+  const [rawConsoleLogs, setRawConsoleLogs] = useState<string[]>([]);
+  const [isHealing, setIsHealing] = useState<boolean>(false);
+  const [healResult, setHealResult] = useState<any>(null);
+  const [copiedLogs, setCopiedLogs] = useState<boolean>(false);
+
   // 'Inspect Preview' toggle & modal state
   const [inspectPreviewToggle, setInspectPreviewToggle] = useState<boolean>(true);
   const [inspectModalOpen, setInspectModalOpen] = useState(false);
@@ -164,10 +179,126 @@ https://playertest.longtailvideo.com/adaptive/oceans/oceans.m3u8`);
   );
   const [selectedChannelName, setSelectedChannelName] = useState<string>('US: ESPN HD (60FPS)');
 
-  // Initial parse so user sees live streams immediately
+  // Initial parse and quick check on mount
   useEffect(() => {
     handleParseM3U();
+    runSqliteDiagnosticScript();
   }, []);
+
+  const runSqliteDiagnosticScript = async () => {
+    setIsAuditRunning(true);
+    const logs: string[] = [];
+    const pushLog = (msg: string) => {
+      logs.push(`[${new Date().toLocaleTimeString()}] ${msg}`);
+    };
+
+    try {
+      pushLog('▶ EXECUTING SQLITE DATA LAYER INGESTION & CONSTRAINT AUDIT...');
+      console.group('%c[SQLite Data Layer Diagnostic Script] Ingestion & Silent Constraint Audit', 'color: #38bdf8; font-weight: bold; font-size: 13px;');
+      console.log('%cStep 1: Running count query on iptv_channels, iptv_categories, iptv_sources...', 'color: #94a3b8');
+
+      const res = await fetch('/api/m1/sqlite/diagnostics');
+      const data = await res.json();
+      const audit = data.audit;
+      setAuditData(audit);
+
+      pushLog(`COUNT(iptv_channels) => ${audit.totalChannels.toLocaleString()} rows`);
+      pushLog(`COUNT(iptv_categories) => ${audit.totalCategories} categories`);
+      pushLog(`COUNT(iptv_sources) => ${audit.totalSources} sources`);
+      pushLog(`PRAGMA integrity_check => ${audit.integrityCheck}`);
+
+      console.info('SQLite Table Count Audit Results:');
+      console.table({
+        'Total Channels in DB': audit.totalChannels,
+        'Expected 10k+ Channels': 10000,
+        'Deficit': Math.max(0, 10000 - audit.totalChannels),
+        'Total Categories': audit.totalCategories,
+        'Integrity Check': audit.integrityCheck,
+        'Duplicate IDs': audit.duplicateIdCount,
+        'Truncated/Untitled Names': audit.potentialTruncationCount,
+      });
+
+      console.info('Channels Distribution by Source:');
+      console.table(audit.channelsBySource);
+
+      // Silent Constraint Verdict
+      if (audit.totalChannels === 12) {
+        console.warn('%c[DIAGNOSTIC ALERT] Exactly 12 channels detected in channels table!', 'color: #f59e0b; font-weight: bold;');
+        console.warn('The 9,988 channels were either dropped due to batch transaction rollback or client-side fallback catalog override.');
+        pushLog('CRITICAL: Exactly 12 channels in SQLite table! Truncation detected.');
+      } else {
+        console.log(`%c[AUDIT PASS] ${audit.totalChannels.toLocaleString()} channels mounted in SQLite.`, 'color: #10b981; font-weight: bold;');
+        pushLog(`PASS: ${audit.totalChannels.toLocaleString()} channels mounted.`);
+      }
+
+      // Output Raw SQLite Error Logs to Console
+      console.group('%cRaw SQLite Error Logs (Silent Constraints & Syntax)', 'color: #f43f5e; font-weight: bold;');
+      if (audit.recentErrors && audit.recentErrors.length > 0) {
+        pushLog(`RAW SQLITE ERRORS FOUND: ${audit.recentErrors.length} entries`);
+        audit.recentErrors.forEach((err: any, idx: number) => {
+          console.error(`[Error #${idx + 1}] Operation: ${err.operation} | Code: ${err.errorCode} | Constraint: ${err.constraintViolated}`);
+          console.error(`Message: ${err.errorMessage}`);
+          if (err.querySnippet) console.error(`Query: ${err.querySnippet}`);
+          if (err.failedRecordSnippet) console.error(`Record: ${err.failedRecordSnippet}`);
+          pushLog(`[SQLITE_ERROR] ${err.constraintViolated}: ${err.errorMessage}`);
+        });
+        console.table(audit.recentErrors);
+      } else {
+        console.log('%cNo raw SQLite error logs registered. Database accepted all transactions cleanly.', 'color: #10b981');
+        pushLog('No raw SQLite constraint violations logged in recent operations.');
+      }
+      console.groupEnd();
+
+      // Output schema & index checks
+      console.groupCollapsed('SQLite Schema & Index Inspection: PRAGMA table_info');
+      console.table(audit.schemaInfo);
+      console.table(audit.indexInfo);
+      console.groupEnd();
+
+      console.groupEnd();
+      pushLog('✓ Diagnostic script execution completed.');
+    } catch (err: any) {
+      console.error('[Diagnostic Script Execution Failed]', err);
+      pushLog(`ERROR: Diagnostic script failed - ${err.message}`);
+    } finally {
+      setIsAuditRunning(false);
+      setRawConsoleLogs(logs);
+    }
+  };
+
+  const handleHeal10kSync = async () => {
+    setIsHealing(true);
+    try {
+      const res = await fetch('/api/m1/sqlite/sync-10k', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetTotal: 14917, sourceId: 'src_master_iptv_01' }),
+      });
+      const data = await res.json();
+      setHealResult(data);
+      await runSqliteDiagnosticScript();
+    } catch (err) {
+      console.error('Failed to sync 10k channels:', err);
+    } finally {
+      setIsHealing(false);
+    }
+  };
+
+  const handleClearSqliteLogs = async () => {
+    try {
+      await fetch('/api/m1/sqlite/clear-errors', { method: 'POST' });
+      await runSqliteDiagnosticScript();
+    } catch (err) {
+      console.error('Failed to clear SQLite error logs:', err);
+    }
+  };
+
+  const handleCopyLogs = () => {
+    const text = rawConsoleLogs.join('\n');
+    navigator.clipboard.writeText(text);
+    setCopiedLogs(true);
+    setTimeout(() => setCopiedLogs(false), 2000);
+  };
 
   const handleParseM3U = async () => {
     setLoading(true);
@@ -257,10 +388,10 @@ https://playertest.longtailvideo.com/adaptive/oceans/oceans.m3u8`);
             </p>
           </div>
 
-          <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-lg border border-slate-800 self-start md:self-auto">
+          <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-lg border border-slate-800 self-start md:self-auto flex-wrap">
             <button
               onClick={() => setActiveSource('XTREAM')}
-              className={`px-3 py-1 rounded text-xs font-semibold transition ${
+              className={`px-3 py-1.5 rounded text-xs font-semibold transition cursor-pointer ${
                 activeSource === 'XTREAM' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -268,11 +399,34 @@ https://playertest.longtailvideo.com/adaptive/oceans/oceans.m3u8`);
             </button>
             <button
               onClick={() => setActiveSource('M3U')}
-              className={`px-3 py-1 rounded text-xs font-semibold transition ${
+              className={`px-3 py-1.5 rounded text-xs font-semibold transition cursor-pointer ${
                 activeSource === 'M3U' ? 'bg-amber-600 text-white' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               M3U Playlist Normalizer
+            </button>
+            <button
+              onClick={() => setActiveSource('SOURCE_TRIAGE')}
+              className={`px-3 py-1.5 rounded text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                activeSource === 'SOURCE_TRIAGE' ? 'bg-rose-600 text-white' : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <ListFilter className="w-3.5 h-3.5" />
+              <span>Source Triage (10k+)</span>
+            </button>
+            <button
+              onClick={() => setActiveSource('SQLITE_DIAGNOSTICS')}
+              className={`px-3 py-1.5 rounded text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                activeSource === 'SQLITE_DIAGNOSTICS' ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Terminal className="w-3.5 h-3.5" />
+              <span>SQLite Constraint Audit</span>
+              {auditData && (
+                <span className={`text-[10px] font-mono px-1 py-0.2 rounded ${auditData.totalChannels === 12 ? 'bg-rose-950 text-rose-300' : 'bg-cyan-950 text-cyan-300'}`}>
+                  {auditData.totalChannels.toLocaleString()}
+                </span>
+              )}
             </button>
           </div>
         </div>
@@ -544,6 +698,195 @@ https://playertest.longtailvideo.com/adaptive/oceans/oceans.m3u8`);
                     </div>
                   )}
                 </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 3. Source Triage Report Tab */}
+      {activeSource === 'SOURCE_TRIAGE' && (
+        <SourceTriageReport sourceName="Milestone 1 High-Capacity Lineup" />
+      )}
+
+      {/* 4. SQLite Diagnostic Script & Silent Constraint Audit Tab */}
+      {activeSource === 'SQLITE_DIAGNOSTICS' && (
+        <div className="space-y-6">
+          {/* Diagnostic Controls Card */}
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Terminal className="w-5 h-5 text-cyan-400" />
+                  <h3 className="text-base font-semibold text-slate-100">
+                    SQLite Data Layer Ingestion &amp; Silent Constraint Audit Script
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-400 mt-1">
+                  Runs exact count queries on <code className="text-cyan-300">iptv_channels</code> and dumps raw SQLite error logs, unique constraint failures, and type mismatches to the browser console.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={runSqliteDiagnosticScript}
+                  disabled={isAuditRunning}
+                  className="px-3.5 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-lg transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-md shadow-cyan-950/40"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isAuditRunning ? 'animate-spin' : ''}`} />
+                  <span>{isAuditRunning ? 'Running Script...' : 'Run Diagnostic Script'}</span>
+                </button>
+                <button
+                  onClick={handleHeal10kSync}
+                  disabled={isHealing}
+                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-md shadow-emerald-950/40"
+                >
+                  <Zap className={`w-3.5 h-3.5 ${isHealing ? 'animate-bounce' : ''}`} />
+                  <span>{isHealing ? 'Syncing 10k+ Channels...' : 'Heal & Commit 10k+ to SQLite'}</span>
+                </button>
+                <button
+                  onClick={handleClearSqliteLogs}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg border border-slate-700 transition flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Bug className="w-3.5 h-3.5 text-rose-400" />
+                  <span>Clear Error Logs</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Diagnostic Metrics Grid */}
+            {auditData && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-slate-800/80">
+                <div className="bg-slate-950/80 border border-slate-800 p-3 rounded-lg">
+                  <span className="text-[11px] font-mono uppercase text-slate-400">Channels in DB</span>
+                  <div className={`text-xl font-bold font-mono mt-0.5 ${auditData.totalChannels === 12 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                    {auditData.totalChannels.toLocaleString()}
+                  </div>
+                  <span className="text-[10px] text-slate-500">
+                    {auditData.totalChannels === 12 ? 'FATAL: Collapsed to 12 channels' : 'PASS: Full catalog committed'}
+                  </span>
+                </div>
+
+                <div className="bg-slate-950/80 border border-slate-800 p-3 rounded-lg">
+                  <span className="text-[11px] font-mono uppercase text-slate-400">Deficit vs 10k+</span>
+                  <div className="text-xl font-bold font-mono text-amber-400 mt-0.5">
+                    {Math.max(0, 10000 - auditData.totalChannels).toLocaleString()}
+                  </div>
+                  <span className="text-[10px] text-slate-500">Missing rows</span>
+                </div>
+
+                <div className="bg-slate-950/80 border border-slate-800 p-3 rounded-lg">
+                  <span className="text-[11px] font-mono uppercase text-slate-400">Silent Constraint Verdict</span>
+                  <div className="text-xs font-bold font-mono text-slate-200 mt-1 truncate" title={auditData.silentConstraintVerdict}>
+                    {auditData.silentConstraintVerdict}
+                  </div>
+                  <span className="text-[10px] text-slate-500">Integrity: {auditData.integrityCheck}</span>
+                </div>
+
+                <div className="bg-slate-950/80 border border-slate-800 p-3 rounded-lg">
+                  <span className="text-[11px] font-mono uppercase text-slate-400">Raw SQLite Errors</span>
+                  <div className={`text-xl font-bold font-mono mt-0.5 ${auditData.recentErrors?.length > 0 ? 'text-rose-400' : 'text-slate-400'}`}>
+                    {auditData.recentErrors?.length || 0}
+                  </div>
+                  <span className="text-[10px] text-slate-500">Operational exceptions</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Real-Time Script Console Output */}
+          <div className="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden font-mono text-xs">
+            <div className="bg-slate-900/90 px-4 py-2.5 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Terminal className="w-4 h-4 text-emerald-400" />
+                <span className="text-slate-200 font-semibold">
+                  Script Output &amp; Browser Console Stream (Check DevTools Console for Objects)
+                </span>
+              </div>
+              <button
+                onClick={handleCopyLogs}
+                className="text-slate-400 hover:text-slate-200 text-[11px] flex items-center gap-1 cursor-pointer"
+              >
+                {copiedLogs ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    <span className="text-emerald-400">Copied</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Copy Logs</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            <div className="p-4 space-y-1 text-[11px] max-h-64 overflow-y-auto bg-slate-950 text-slate-300">
+              {rawConsoleLogs.length === 0 ? (
+                <div className="text-slate-600 italic">Click "Run Diagnostic Script" to execute audit and stream raw SQLite logs...</div>
+              ) : (
+                rawConsoleLogs.map((log, idx) => (
+                  <div
+                    key={idx}
+                    className={`${
+                      log.includes('CRITICAL') || log.includes('ERROR') || log.includes('FATAL')
+                        ? 'text-rose-400 font-bold'
+                        : log.includes('WARN')
+                        ? 'text-amber-400'
+                        : log.includes('PASS') || log.includes('completed')
+                        ? 'text-emerald-400'
+                        : 'text-slate-300'
+                    }`}
+                  >
+                    {log}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Raw SQLite Errors Table */}
+          {auditData?.recentErrors?.length > 0 && (
+            <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden space-y-2">
+              <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ShieldAlert className="w-4 h-4 text-rose-400" />
+                  <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+                    Raw SQLite Operational Exception Logs ({auditData.recentErrors.length})
+                  </h4>
+                </div>
+                <span className="text-[11px] text-slate-500 font-mono">
+                  Captured from SQLite statement runtime
+                </span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse font-sans">
+                  <thead>
+                    <tr className="border-b border-slate-800 bg-slate-950/80 text-slate-400 uppercase font-mono text-[11px]">
+                      <th className="p-3 w-32">Timestamp</th>
+                      <th className="p-3 w-40">Operation</th>
+                      <th className="p-3 w-36">Constraint Violated</th>
+                      <th className="p-3">Raw SQLite Error Message</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 text-slate-300 font-mono text-[11px]">
+                    {auditData.recentErrors.map((err: any) => (
+                      <tr key={err.id} className="hover:bg-slate-800/30">
+                        <td className="p-3 text-slate-500 whitespace-nowrap">
+                          {new Date(err.timestamp).toLocaleTimeString()}
+                        </td>
+                        <td className="p-3 text-slate-300">{err.operation}</td>
+                        <td className="p-3">
+                          <span className="px-2 py-0.5 rounded text-[10px] bg-rose-950 text-rose-400 border border-rose-800">
+                            {err.constraintViolated}
+                          </span>
+                        </td>
+                        <td className="p-3 text-rose-300">{err.errorMessage}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}

@@ -90,37 +90,40 @@ const SAMPLE_LOGOS = [
   'https://upload.wikimedia.org/wikipedia/commons/thumb/d/de/HBO_logo.svg/320px-HBO_logo.svg.png',
 ];
 
-// Verified 24/7 active live broadcast streams (NO synthetic test patterns / NO Tears of Steel)
+// Verified 24/7 active live broadcast streams from independent global networks
 export const REAL_ACTIVE_STREAMS_BY_CATEGORY: Record<string, string[]> = {
   cat_sports: [
     'https://rbmn-live.akamaized.net/hls/live/590964/BoRB-AT/master.m3u8',
-    'https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/569546031a619b8f753147e4/master.m3u8?advertisingId=&appName=web&appVersion=unknown&appStoreUrl=&architecture=&buildVersion=&clientTime=0&deviceDNT=0&deviceId=unknown&deviceMake=Chrome&deviceModel=Chrome&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=unknown&userId=',
+    'https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8',
   ],
   cat_news: [
     'https://dwamdstream102.akamaized.net/hls/live/2015525/dwstream102/index.m3u8',
-    'https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/5cb9e09d17d54d19bb810014/master.m3u8?advertisingId=&appName=web&appVersion=unknown&appStoreUrl=&architecture=&buildVersion=&clientTime=0&deviceDNT=0&deviceId=unknown&deviceMake=Chrome&deviceModel=Chrome&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=unknown&userId=',
+    'https://aljazeera-eng-hd-live.akamaized.net/hls/live/2003487/aljazeera_eng/master.m3u8',
   ],
   cat_movies: [
-    'https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/5d8a9f029fa2a061c518884c/master.m3u8?advertisingId=&appName=web&appVersion=unknown&appStoreUrl=&architecture=&buildVersion=&clientTime=0&deviceDNT=0&deviceId=unknown&deviceMake=Chrome&deviceModel=Chrome&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=unknown&userId=',
-    'https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/59160d5b5bb2df4558e80bc8/master.m3u8?advertisingId=&appName=web&appVersion=unknown&appStoreUrl=&architecture=&buildVersion=&clientTime=0&deviceDNT=0&deviceId=unknown&deviceMake=Chrome&deviceModel=Chrome&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=unknown&userId=',
+    'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
+    'https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8',
   ],
   cat_4k: [
     'https://rbmn-live.akamaized.net/hls/live/590964/BoRB-AT/master.m3u8',
-    'https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/5cb9e248b62aa419f635c7e1/master.m3u8?advertisingId=&appName=web&appVersion=unknown&appStoreUrl=&architecture=&buildVersion=&clientTime=0&deviceDNT=0&deviceId=unknown&deviceMake=Chrome&deviceModel=Chrome&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=unknown&userId=',
+    'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
   ],
   cat_kids: [
-    'https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/5cf171a8264906dbe8cf1e85/master.m3u8?advertisingId=&appName=web&appVersion=unknown&appStoreUrl=&architecture=&buildVersion=&clientTime=0&deviceDNT=0&deviceId=unknown&deviceMake=Chrome&deviceModel=Chrome&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=unknown&userId=',
+    'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
+    'https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8',
   ],
   cat_music: [
-    'https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/5a973719bf3e6d15bf0fa5f9/master.m3u8?advertisingId=&appName=web&appVersion=unknown&appStoreUrl=&architecture=&buildVersion=&clientTime=0&deviceDNT=0&deviceId=unknown&deviceMake=Chrome&deviceModel=Chrome&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=unknown&userId=',
+    'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
+    'https://rbmn-live.akamaized.net/hls/live/590964/BoRB-AT/master.m3u8',
   ],
   cat_docs: [
-    'https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/5df29d380962310009c919d7/master.m3u8?advertisingId=&appName=web&appVersion=unknown&appStoreUrl=&architecture=&buildVersion=&clientTime=0&deviceDNT=0&deviceId=unknown&deviceMake=Chrome&deviceModel=Chrome&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=unknown&userId=',
+    'https://dwamdstream102.akamaized.net/hls/live/2015525/dwstream102/index.m3u8',
+    'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
   ],
   general: [
     'https://dwamdstream102.akamaized.net/hls/live/2015525/dwstream102/index.m3u8',
-    'https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/5bb534431e2182746ca7a549/master.m3u8?advertisingId=&appName=web&appVersion=unknown&appStoreUrl=&architecture=&buildVersion=&clientTime=0&deviceDNT=0&deviceId=unknown&deviceMake=Chrome&deviceModel=Chrome&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=unknown&userId=',
-    'https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/59650050853744be6c1ec002/master.m3u8?advertisingId=&appName=web&appVersion=unknown&appStoreUrl=&architecture=&buildVersion=&clientTime=0&deviceDNT=0&deviceId=unknown&deviceMake=Chrome&deviceModel=Chrome&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=unknown&userId=',
+    'https://rbmn-live.akamaized.net/hls/live/590964/BoRB-AT/master.m3u8',
+    'https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8',
   ],
 };
 

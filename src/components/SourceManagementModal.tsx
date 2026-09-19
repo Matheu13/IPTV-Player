@@ -99,6 +99,22 @@ export const SourceManagementModal: React.FC<SourceManagementModalProps> = ({
     }, 800);
   };
 
+  const handleDeleteSource = async (id: string, name: string) => {
+    if (!confirm(`Are you sure you want to permanently delete "${name}"? This cannot be undone.`)) return;
+    try {
+      await fetch(`/api/m1/sources/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      await fetch(`/api/m3u/sources/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      await fetch(`/api/sources/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    } catch (e) {
+      console.warn('Backend delete notification failed:', e);
+    }
+    globalUnifiedIptvEngine.removeSource(id);
+    setSources([...globalUnifiedIptvEngine.getState().sources]);
+    if (activeSourceId === id) {
+      setActiveSourceId('ALL');
+    }
+  };
+
   const getTypeIcon = (type: IptvSource['type']) => {
     switch (type) {
       case 'XTREAM_CODES':
@@ -250,6 +266,14 @@ export const SourceManagementModal: React.FC<SourceManagementModalProps> = ({
                       }`}
                     >
                       {src.enabled ? 'Enabled' : 'Disabled'}
+                    </button>
+                    <button
+                      id={`delete-src-${src.id}`}
+                      onClick={() => handleDeleteSource(src.id, src.name)}
+                      className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 rounded-lg transition"
+                      title="Permanently remove source"
+                    >
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </div>

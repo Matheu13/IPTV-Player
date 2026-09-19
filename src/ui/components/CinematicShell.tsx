@@ -165,6 +165,10 @@ const CinematicShellContent: React.FC<CinematicShellProps> = ({
 
         // D-Pad Remote Navigation Logic
         case 'ArrowLeft':
+          if (activeTab === 'live') {
+            // Live TV handles internal 3-panel D-pad navigation
+            break;
+          }
           if (focusZone === 'content') {
             // Move from content to navigation rail
             setFocusZone('rail');
@@ -212,6 +216,10 @@ const CinematicShellContent: React.FC<CinematicShellProps> = ({
 
         case 'Escape':
         case 'Backspace':
+          if (activeTab === 'live') {
+            // Live TV handles Back button state reversal and exit confirmation dialog
+            break;
+          }
           // Return focus to navigation or exit fullscreen
           if (playbackState.presentationMode === 'fullscreen') {
             e.preventDefault();
@@ -380,6 +388,7 @@ const CinematicShellContent: React.FC<CinematicShellProps> = ({
               onSelectChannel={handleSelectChannel}
               isTvMode={isTvMode}
               onOpenSourceManager={() => setIsSourceModalOpen(true)}
+              onExit={() => setActiveTab('home')}
             />
           )}
 

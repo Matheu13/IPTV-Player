@@ -13,6 +13,7 @@ import {
   buildHierarchicalCategoryTree,
   flattenHierarchyTree,
   formatRegionLabel,
+  filterChannelsByHierarchySelection,
 } from '../src/lib/categoryHierarchy';
 
 function assert(condition: boolean, message: string) {
@@ -150,5 +151,68 @@ const collapsedLabels = collapsedRows.map((r) => r.displayLabel);
 assert(!collapsedLabels.includes('Expressen Play'), 'Collapsed Sweden must hide Expressen Play');
 
 console.log('✅ [Test 3] Collapsible / Expandable tree flattening works accurately.');
+
+console.log('🧪 [Test 4] Testing channelIds association and direct channel pulling per country/subcategory...');
+
+// 1. Verify Sweden country channelIds and child channelIds
+assert(swedenGroup!.channelIds.length === 7, `Sweden must have 7 channels, found ${swedenGroup!.channelIds.length}`);
+assert(swedenGroup!.channelIds.includes('se-1'), 'Sweden must contain se-1');
+assert(swedenGroup!.channelIds.includes('se-2'), 'Sweden must contain se-2');
+assert(swedenGroup!.channelIds.includes('se-7'), 'Sweden must contain se-7');
+
+const expressenChild = swedenGroup!.children.find((c) => c.label === 'Expressen Play');
+assert(Boolean(expressenChild), 'Expressen Play child must exist');
+assert(expressenChild!.channelIds.length === 2, `Expressen Play must have 2 channels, found ${expressenChild!.channelIds.length}`);
+assert(expressenChild!.channelIds.includes('se-1'), 'Expressen Play must have se-1');
+assert(expressenChild!.channelIds.includes('se-2'), 'Expressen Play must have se-2');
+
+const disneyChild = swedenGroup!.children.find((c) => c.label === 'Disney+');
+assert(Boolean(disneyChild), 'Disney+ child must exist');
+assert(disneyChild!.channelIds.includes('se-3'), 'Disney+ must have se-3');
+
+const maxSportsChild = swedenGroup!.children.find((c) => c.label === 'Max Sports');
+assert(Boolean(maxSportsChild), 'Max Sports child must exist');
+assert(maxSportsChild!.channelIds.includes('se-4'), 'Max Sports must have se-4');
+
+const teliaChild = swedenGroup!.children.find((c) => c.label === 'TeliaPlay Events');
+assert(Boolean(teliaChild), 'TeliaPlay Events child must exist');
+assert(teliaChild!.channelIds.includes('se-5'), 'TeliaPlay Events must have se-5');
+
+const viaplayChild = swedenGroup!.children.find((c) => c.label === 'ViaPlay Events');
+assert(Boolean(viaplayChild), 'ViaPlay Events child must exist');
+assert(viaplayChild!.channelIds.includes('se-6'), 'ViaPlay Events must have se-6');
+
+// 2. Verify UK, Canada, Norway, Other channelIds
+const ukGroup = tree.countryGroups.find((g) => g.label === 'UK');
+assert(Boolean(ukGroup), 'UK group must exist');
+assert(ukGroup!.channelIds.length === 2, `UK must have 2 channels, found ${ukGroup!.channelIds.length}`);
+assert(ukGroup!.channelIds.includes('uk-1') && ukGroup!.channelIds.includes('uk-2'), 'UK must contain uk-1 and uk-2');
+
+const canadaGroup = tree.countryGroups.find((g) => g.label === 'Canada');
+assert(Boolean(canadaGroup), 'Canada group must exist');
+assert(canadaGroup!.channelIds.length === 3, `Canada must have 3 channels, found ${canadaGroup!.channelIds.length}`);
+assert(canadaGroup!.channelIds.includes('ca-1') && canadaGroup!.channelIds.includes('ca-2') && canadaGroup!.channelIds.includes('ca-3'), 'Canada must contain ca-1, ca-2, ca-3');
+
+const norwayGroup = tree.countryGroups.find((g) => g.label === 'Norway');
+assert(Boolean(norwayGroup), 'Norway group must exist');
+assert(norwayGroup!.channelIds.length === 2, `Norway must have 2 channels, found ${norwayGroup!.channelIds.length}`);
+assert(norwayGroup!.channelIds.includes('no-1') && norwayGroup!.channelIds.includes('no-2'), 'Norway must contain no-1 and no-2');
+
+assert(tree.otherGroup.channelIds.length === 3, `Other must have 3 channels, found ${tree.otherGroup.channelIds.length}`);
+assert(tree.otherGroup.channelIds.includes('oth-1'), 'Other must contain oth-1');
+
+// 3. Test filterChannelsByHierarchySelection with country and subcategory IDs
+const swedenChannels = filterChannelsByHierarchySelection(mockChannels, swedenGroup!.id, tree);
+assert(swedenChannels.length === 7, `filterChannelsByHierarchySelection for Sweden must return 7 channels, got ${swedenChannels.length}`);
+
+const expressenChannels = filterChannelsByHierarchySelection(mockChannels, expressenChild!.id, tree);
+assert(expressenChannels.length === 2, `filterChannelsByHierarchySelection for Expressen Play must return 2 channels, got ${expressenChannels.length}`);
+assert(expressenChannels.map((c) => c.id).includes('se-1'), 'Expressen filtered channels must include se-1');
+assert(expressenChannels.map((c) => c.id).includes('se-2'), 'Expressen filtered channels must include se-2');
+
+const ukChannels = filterChannelsByHierarchySelection(mockChannels, ukGroup!.id, tree);
+assert(ukChannels.length === 2, `filterChannelsByHierarchySelection for UK must return 2 channels, got ${ukChannels.length}`);
+
+console.log('✅ [Test 4] Channel IDs association and direct channel pulling verified with 100% integrity.');
 
 console.log('🎉 ALL TESTS PASSED: Panel 2 category hierarchy and provider mapping validated successfully!');

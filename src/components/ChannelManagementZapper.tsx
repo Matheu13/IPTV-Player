@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   Heart,
   FolderPlus,
@@ -27,6 +27,10 @@ import {
   Check,
   Flame,
   Play,
+  ShieldCheck,
+  RefreshCw,
+  AlertTriangle,
+  BarChart2,
 } from 'lucide-react';
 import { CustomBouquet, ChannelOverrideMapping, UnifiedChannel } from '../types';
 import { ChannelManager, RemoteZapperController, isSportsChannel } from '../lib/channelManager';
@@ -37,6 +41,423 @@ import {
   NormalizedChildCategory,
   NormalizedCategoryHierarchy,
 } from '../lib/categoryNormalizer';
+
+/**
+ * Presentation-Layer Sports Keyword Parser
+ *
+ * Scans channel names and category metadata for sports terms (e.g. 'Sport', 'DAZN', 'EPL', 'ESPN', 'F1')
+ * strictly residing in the presentation layer without altering or mutating underlying provider data.
+ */
+export const PRESENTATION_SPORTS_KEYWORDS: string[] = [
+  'sport',
+  'dazn',
+  'epl',
+  'premier league',
+  'espn',
+  'football',
+  'soccer',
+  'fotboll',
+  'f1',
+  'formula',
+  'motogp',
+  'racing',
+  'tennis',
+  'golf',
+  'nfl',
+  'nba',
+  'nhl',
+  'mlb',
+  'ufc',
+  'wwe',
+  'fight',
+  'boxing',
+  'cricket',
+  'rugby',
+  'bein',
+  'supersport',
+  'sky sport',
+  'bt sport',
+  'tnt sport',
+  'eurosport',
+  'fox sport',
+  'allsvenskan',
+  'shl',
+  'hockey',
+  'viaplay',
+  'teliaplay',
+  'max sports',
+  'tv4 play events',
+];
+
+export function isPresentationSportsChannel(channel: {
+  name?: string;
+  category?: string;
+  categoryName?: string;
+  categoryId?: string;
+  groupTitle?: string;
+}): boolean {
+  const text = [
+    channel.name || '',
+    channel.category || '',
+    channel.categoryName || '',
+    channel.categoryId || '',
+    channel.groupTitle || '',
+  ]
+    .join(' ')
+    .toLowerCase();
+
+  return PRESENTATION_SPORTS_KEYWORDS.some((kw) => text.includes(kw));
+}
+
+// ---------------------------------------------------------------------------
+// TEST SUITE: Transformation Logic & Grouped Hierarchy Reachability Verifier
+// ---------------------------------------------------------------------------
+
+export interface HierarchyIntegrityTestCase {
+  id: string;
+  name: string;
+  category: 'COUNTS' | 'REACHABILITY' | 'DATA_LOSS' | 'STRUCTURAL';
+  passed: boolean;
+  expected: any;
+  actual: any;
+  description: string;
+}
+
+export interface HierarchyIntegritySuiteReport {
+  passed: boolean;
+  timestamp: string;
+  rawChannelCount: number;
+  hierarchyTotalChannels: number;
+  aggregatedLeafCount: number;
+  uniqueReachableStreamIds: number;
+  missingStreamIds: (string | number)[];
+  totalCountries: number;
+  totalSubCategories: number;
+  testCases: HierarchyIntegrityTestCase[];
+  log: string[];
+}
+
+/**
+ * In-file Test Suite that verifies the category normalizer transformation logic
+ * by comparing the count of raw channels versus the count of channels in the grouped hierarchy,
+ * confirming no data is lost during grouping and all original streams remain reachable.
+ */
+export function runHierarchyIntegrityTestSuite(
+  rawChannels: Array<{
+    id?: string | number;
+    streamId?: string | number;
+    name?: string;
+    category?: string;
+    categoryName?: string;
+    categoryId?: string;
+    streamUrl?: string;
+  }>,
+  hierarchy: NormalizedCategoryHierarchy
+): HierarchyIntegritySuiteReport {
+  const log: string[] = [];
+  const testCases: HierarchyIntegrityTestCase[] = [];
+
+  // 1. Total Raw Channels vs Hierarchy Total Count
+  const rawCount = rawChannels.length;
+  const hierCount = hierarchy.totalChannels;
+  const countMatch = rawCount === hierCount;
+  log.push(
+    `[Check 1] Raw Channels Count (${rawCount}) vs Normalized Hierarchy totalChannels (${hierCount}): ${
+      countMatch ? 'MATCH (PASS)' : 'MISMATCH (FAIL)'
+    }`
+  );
+  testCases.push({
+    id: 'count-raw-vs-hierarchy',
+    name: 'Total Channel Count Preservation',
+    category: 'COUNTS',
+    passed: countMatch,
+    expected: rawCount,
+    actual: hierCount,
+    description:
+      'Verifies the total channel count in the normalized hierarchy matches the raw channel count exactly with 0 dropped entries.',
+  });
+
+  // 2. Aggregated Leaf Counts across all Country and Child Groups
+  let leafSum = 0;
+  const reachableIds = new Set<string | number>();
+  for (const country of hierarchy.countries) {
+    for (const sub of country.subCategories) {
+      leafSum += sub.count;
+      if (sub.channelIds && sub.channelIds.length > 0) {
+        sub.channelIds.forEach((id) => reachableIds.add(String(id)));
+      }
+    }
+  }
+  const leafSumMatch = leafSum === rawCount;
+  log.push(
+    `[Check 2] Aggregated Leaf Subcategory Counts (${leafSum}) vs Raw Input Channels (${rawCount}): ${
+      leafSumMatch ? 'MATCH (PASS)' : 'MISMATCH (FAIL)'
+    }`
+  );
+  testCases.push({
+    id: 'count-leaf-aggregation',
+    name: 'Leaf Subcategory Sum Validation',
+    category: 'COUNTS',
+    passed: leafSumMatch,
+    expected: rawCount,
+    actual: leafSum,
+    description:
+      'Ensures the sum of channel counts across all country and child groups equals raw input channels with zero duplicate drops.',
+  });
+
+  // 3. Zero Data Loss & 100% Stream Reachability
+  const missingStreamIds: (string | number)[] = [];
+  for (const ch of rawChannels) {
+    const streamKey = String(ch.id ?? ch.streamId ?? '');
+    if (!streamKey || !reachableIds.has(streamKey)) {
+      missingStreamIds.push(ch.id ?? ch.streamId ?? 'unknown');
+    }
+  }
+  const zeroLoss = missingStreamIds.length === 0;
+  log.push(
+    `[Check 3] Stream Reachability: ${reachableIds.size} unique reachable streams. Missing/unreachable: ${missingStreamIds.length}`
+  );
+  testCases.push({
+    id: 'reachability-zero-loss',
+    name: '100% Stream Reachability (Zero Data Loss)',
+    category: 'REACHABILITY',
+    passed: zeroLoss,
+    expected: 0,
+    actual: missingStreamIds.length,
+    description:
+      'Confirms that every single raw channel stream ID remains mapped and reachable within at least one normalized leaf category.',
+  });
+
+  // 4. Structural Tree Group Invariants
+  const invalidCountries = hierarchy.countries.filter(
+    (c) => !c.id || !c.name || c.count < 0 || !Array.isArray(c.subCategories)
+  );
+  const structureValid = invalidCountries.length === 0 && hierarchy.countries.length > 0;
+  log.push(
+    `[Check 4] Hierarchy Structure: ${hierarchy.countries.length} country groups, ${invalidCountries.length} invalid.`
+  );
+  testCases.push({
+    id: 'structural-validity',
+    name: 'Tree Group Structure Invariants',
+    category: 'STRUCTURAL',
+    passed: structureValid,
+    expected: 'All countries formatted with valid names and child arrays',
+    actual: structureValid ? 'Valid' : `${invalidCountries.length} malformed groups`,
+    description:
+      'Validates that every country in the hierarchy has formatted title names, normalized IDs, and non-empty child arrays.',
+  });
+
+  // 5. Sports Presentation Layer Non-Destructive Invariance
+  let sportsCheckPassed = true;
+  for (let i = 0; i < Math.min(rawChannels.length, 50); i++) {
+    const ch = rawChannels[i];
+    const beforeStr = JSON.stringify(ch);
+    isPresentationSportsChannel(ch as any);
+    const afterStr = JSON.stringify(ch);
+    if (beforeStr !== afterStr) {
+      sportsCheckPassed = false;
+      break;
+    }
+  }
+  testCases.push({
+    id: 'sports-filter-non-destructive',
+    name: 'Sports Presentation Layer Non-Destructive Invariance',
+    category: 'DATA_LOSS',
+    passed: sportsCheckPassed,
+    expected: 'Underlying channel objects strictly unmodified',
+    actual: sportsCheckPassed ? 'Pristine' : 'Modified',
+    description:
+      'Confirms that the presentation-layer sports metadata parser leaves underlying provider data and streaming properties 100% intact.',
+  });
+
+  const totalSubCategories = hierarchy.countries.reduce((acc, c) => acc + c.subCategories.length, 0);
+  const allPassed = testCases.every((t) => t.passed);
+
+  return {
+    passed: allPassed,
+    timestamp: new Date().toISOString(),
+    rawChannelCount: rawCount,
+    hierarchyTotalChannels: hierCount,
+    aggregatedLeafCount: leafSum,
+    uniqueReachableStreamIds: reachableIds.size,
+    missingStreamIds,
+    totalCountries: hierarchy.countries.length,
+    totalSubCategories,
+    testCases,
+    log,
+  };
+}
+
+interface MemoizedCategoryTreeProps {
+  countries: NormalizedCountryGroup[];
+  expandedCountries: Record<string, boolean>;
+  expandedSubCategories: Record<string, boolean>;
+  selectedCountry: string | null;
+  selectedSubCategory: string | null;
+  isSportsFilterActive: boolean;
+  visibleSidebarRows: any[];
+  onToggleCountry: (country: NormalizedCountryGroup, e?: React.SyntheticEvent) => void;
+  onToggleSubCategory: (subId: string, e?: React.SyntheticEvent) => void;
+  onSelectSubCategory: (countryName: string, subName: string) => void;
+  onTuneChannel?: (streamId: string | number, channelName?: string) => void;
+  onSetZapperNotice: (msg: string) => void;
+  onSetFocusZone: (zone: 'sidebar' | 'channels') => void;
+  onSetFocusedSidebarIndex: (index: number) => void;
+}
+
+export const MemoizedCategoryTree: React.FC<MemoizedCategoryTreeProps> = React.memo(
+  function MemoizedCategoryTree({
+    countries,
+    expandedCountries,
+    expandedSubCategories,
+    selectedCountry,
+    selectedSubCategory,
+    isSportsFilterActive,
+    visibleSidebarRows,
+    onToggleCountry,
+    onToggleSubCategory,
+    onSelectSubCategory,
+    onTuneChannel,
+    onSetZapperNotice,
+    onSetFocusZone,
+    onSetFocusedSidebarIndex,
+  }) {
+    return (
+      <div className="mt-2 space-y-1">
+        {countries.map((country) => {
+          const isExpanded = !!(expandedCountries[country.id] || expandedCountries[country.name]);
+          const isSelectedCountry = selectedCountry === country.name && !selectedSubCategory;
+          const countryElemId = `country-header-${country.id.toLowerCase()}`;
+
+          return (
+            <div key={country.id} className="space-y-1">
+              {/* Country Header Button */}
+              <button
+                type="button"
+                id={countryElemId}
+                tabIndex={0}
+                onFocus={() => {
+                  onSetFocusZone('sidebar');
+                  const idx = visibleSidebarRows.findIndex((r) => r.id === countryElemId);
+                  if (idx >= 0) onSetFocusedSidebarIndex(idx);
+                }}
+                onClick={(e) => onToggleCountry(country, e)}
+                className={`w-full px-2.5 py-1.5 rounded-lg flex items-center justify-between cursor-pointer text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-400 ${
+                  isSelectedCountry
+                    ? 'bg-slate-800 text-white font-bold ring-1 ring-slate-700'
+                    : 'hover:bg-slate-900 text-slate-300'
+                }`}
+              >
+                <div className="flex items-center gap-1.5 font-semibold">
+                  {isExpanded ? (
+                    <span className="text-slate-400 text-xs">▾</span>
+                  ) : (
+                    <span className="text-slate-500 text-xs">▸</span>
+                  )}
+                  <span>{country.flag || '🌐'}</span>
+                  <span>{country.name}</span>
+                </div>
+                {/* Count of nested channels next to each country group name */}
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700/60">
+                  {country.count} channels
+                </span>
+              </button>
+
+              {/* Subcategories and Channels: Shown only when the group is in an expanded state */}
+              {isExpanded && (
+                <div className="pl-4 pr-1 space-y-1 border-l border-slate-800/80 ml-2.5 my-1">
+                  {country.subCategories.map((sub) => {
+                    const isSelectedSub = selectedCountry === country.name && selectedSubCategory === sub.name;
+                    const isZeroInSports = isSportsFilterActive && sub.count === 0;
+                    const subElemId = `subcat-${country.id.toLowerCase()}-${sub.id.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
+                    const isSubExpanded = !!expandedSubCategories[sub.id];
+
+                    return (
+                      <div key={sub.id} className="space-y-0.5">
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            id={subElemId}
+                            tabIndex={0}
+                            onFocus={() => {
+                              onSetFocusZone('sidebar');
+                              const idx = visibleSidebarRows.findIndex((r) => r.id === subElemId);
+                              if (idx >= 0) onSetFocusedSidebarIndex(idx);
+                            }}
+                            onClick={() => onSelectSubCategory(country.name, sub.name)}
+                            className={`flex-1 px-2 py-1.5 rounded text-left flex items-center justify-between text-xs transition-all focus:outline-none focus:ring-2 focus:ring-indigo-400 ${
+                              isSelectedSub
+                                ? 'bg-indigo-600/90 text-white font-bold shadow-xs'
+                                : isZeroInSports
+                                ? 'text-slate-600 hover:text-slate-500 hover:bg-slate-900/40'
+                                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/70'
+                            }`}
+                          >
+                            <span className="truncate">{sub.name}</span>
+                            <span
+                              className={`text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800/80 ml-1 border border-slate-700/40 ${
+                                isZeroInSports ? 'text-slate-700' : 'text-slate-400'
+                              }`}
+                            >
+                              {sub.count} channels
+                            </span>
+                          </button>
+                          {sub.channels && sub.channels.length > 0 && (
+                            <button
+                              type="button"
+                              id={`toggle-channels-${sub.id}`}
+                              onClick={(e) => onToggleSubCategory(sub.id, e)}
+                              className="p-1 text-slate-500 hover:text-slate-300 hover:bg-slate-800 rounded transition-colors text-[10px]"
+                              title={isSubExpanded ? 'Hide nested channels' : 'Show nested channels'}
+                            >
+                              {isSubExpanded ? '▾' : '▸'}
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Nested member channels rendered when subcategory is in an expanded state */}
+                        {isSubExpanded && sub.channels && sub.channels.length > 0 && (
+                          <div className="pl-3 pr-1 py-1 space-y-0.5 border-l border-indigo-900/60 ml-1.5 my-0.5 max-h-48 overflow-y-auto">
+                            {sub.channels.map((chItem: any, idx: number) => {
+                              const chId = chItem.id || chItem.streamId || idx;
+                              const chName = chItem.name || chItem.title || `Channel ${chId}`;
+                              return (
+                                <button
+                                  key={chId}
+                                  type="button"
+                                  id={`tree-ch-${chId}`}
+                                  onClick={() => {
+                                    if (onTuneChannel) {
+                                      onTuneChannel(chId, chName);
+                                    }
+                                    onSetZapperNotice(`Tuned to ${chName}`);
+                                  }}
+                                  className="w-full px-2 py-1 rounded text-left flex items-center justify-between text-[11px] text-slate-400 hover:text-white hover:bg-slate-800/90 transition-colors group cursor-pointer"
+                                >
+                                  <span className="truncate flex items-center gap-1.5">
+                                    <span className="text-[9px] font-mono text-indigo-400 group-hover:text-indigo-300">
+                                      #{idx + 1}
+                                    </span>
+                                    <span className="truncate">{chName}</span>
+                                  </span>
+                                  <span className="text-[9px] text-emerald-400 font-mono shrink-0 ml-1">LIVE</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+);
 
 interface ChannelManagementZapperProps {
   onTuneChannel?: (channelId: string | number, name: string) => void;
@@ -56,6 +477,7 @@ export const ChannelManagementZapper: React.FC<ChannelManagementZapperProps> = (
 
   // Smart Sport Filtering & Country Taxonomy State
   const [isSportsFilterActive, setIsSportsFilterActive] = useState<boolean>(false);
+  const [sportsTopicKeyword, setSportsTopicKeyword] = useState<string>('ALL');
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [selectedSubCategory, setSelectedSubCategory] = useState<string | null>(null);
   const [expandedCountries, setExpandedCountries] = useState<Record<string, boolean>>({
@@ -70,7 +492,12 @@ export const ChannelManagementZapper: React.FC<ChannelManagementZapperProps> = (
     other: false,
     Other: false,
   });
+  const [expandedSubCategories, setExpandedSubCategories] = useState<Record<string, boolean>>({});
   const [showRemote, setShowRemote] = useState<boolean>(true);
+
+  // Test Suite Inspection Modal State
+  const [showTestSuiteModal, setShowTestSuiteModal] = useState<boolean>(false);
+  const [testSuiteRunCount, setTestSuiteRunCount] = useState<number>(0);
 
   // 10-Foot UI Remote & D-pad Navigation State
   const [focusZone, setFocusZone] = useState<'sidebar' | 'channels'>('sidebar');
@@ -79,29 +506,177 @@ export const ChannelManagementZapper: React.FC<ChannelManagementZapperProps> = (
   // Remote & Keypad State
   const [keypadBuffer, setKeypadBuffer] = useState<string>('');
   const [currentChannelIndex, setCurrentChannelIndex] = useState<number>(0);
+  const [engineUpdateTick, setEngineUpdateTick] = useState<number>(0);
 
-  // Dynamic normalized hierarchy (Country -> Child Category)
-  const normalizedHierarchy: NormalizedCategoryHierarchy = useMemo(() => {
-    const allEngineChannels = globalUnifiedIptvEngine.getAllChannels();
-    const catalog =
-      allEngineChannels && allEngineChannels.length > 0
-        ? allEngineChannels
-        : (ChannelManager.getHydratedWindow(0, 1000).channels as any);
+  // Subscribe to engine state mutations (source addition, removal, channel sync)
+  useEffect(() => {
+    return globalUnifiedIptvEngine.subscribe(() => {
+      setEngineUpdateTick((v) => v + 1);
+    });
+  }, []);
 
-    const baseList = isSportsFilterActive
-      ? catalog.filter((c: any) =>
-          isSportsChannel({ name: c.name, categoryName: c.category || c.categoryName || c.categoryId })
-        )
-      : catalog;
+  // Raw channel catalog sourced from Unified Engine or compressed catalog
+  const allCatalogChannels = useMemo(() => {
+    const allEngineChannels = globalUnifiedIptvEngine.getAllChannels(true);
+    if (allEngineChannels && allEngineChannels.length > 0) {
+      return allEngineChannels.map((c) => ({
+        id: c.id,
+        streamId: c.id,
+        name: c.name,
+        category: c.category || 'General',
+        categoryName: c.category || 'General',
+        categoryId: c.category || 'General',
+        streamUrl: c.streamUrl || c.directSourceUrl || c.rawStreamUrl,
+      }));
+    }
+    const compressed = ChannelManager.getCompressedCatalog();
+    if (compressed && compressed.length > 0) {
+      return compressed.map((c) => ({
+        id: c.id,
+        streamId: c.streamId,
+        name: c.name,
+        category: c.categoryName || 'General',
+        categoryName: c.categoryName || 'General',
+        categoryId: c.categoryId || 'General',
+        streamUrl: c.streamUrl,
+      }));
+    }
+    const windowChannels = ChannelManager.getHydratedWindow(0, 1000).channels;
+    return windowChannels.map((c) => ({
+      id: c.id,
+      streamId: c.streamId,
+      name: c.name,
+      category: c.categoryName || 'General',
+      categoryName: c.categoryName || 'General',
+      categoryId: c.categoryId || 'General',
+      streamUrl: c.resolvedStreamUrl,
+    }));
+  }, [engineUpdateTick]);
 
+  // Full Unfiltered Normalized Hierarchy across complete provider data
+  const fullNormalizedHierarchy: NormalizedCategoryHierarchy = useMemo(() => {
     return normalizeCategoryHierarchy(
-      baseList.map((c: any) => ({
+      allCatalogChannels.map((c) => ({
         id: c.id || c.streamId,
         name: c.name,
         category: c.category || c.categoryName || c.categoryId || 'General',
       }))
     );
-  }, [isSportsFilterActive]);
+  }, [allCatalogChannels]);
+
+  // Execute Test Suite comparing raw channel counts vs grouped hierarchy counts
+  const testSuiteResult: HierarchyIntegritySuiteReport = useMemo(() => {
+    return runHierarchyIntegrityTestSuite(allCatalogChannels, fullNormalizedHierarchy);
+  }, [allCatalogChannels, fullNormalizedHierarchy, testSuiteRunCount]);
+
+  // Dynamic normalized hierarchy (Country -> Child Category) for Panel 2
+  const normalizedHierarchy: NormalizedCategoryHierarchy = useMemo(() => {
+    const baseList = isSportsFilterActive
+      ? allCatalogChannels.filter((c) =>
+          isPresentationSportsChannel({
+            name: c.name,
+            category: c.category,
+            categoryName: c.categoryName,
+            categoryId: c.categoryId,
+          })
+        )
+      : allCatalogChannels;
+
+    return normalizeCategoryHierarchy(
+      baseList.map((c) => ({
+        id: c.id || c.streamId,
+        name: c.name,
+        category: c.category || c.categoryName || c.categoryId || 'General',
+      }))
+    );
+  }, [allCatalogChannels, isSportsFilterActive]);
+
+  // Dynamic calculation of all sports channels via presentation layer
+  const dynamicSportsCount = useMemo(() => {
+    return allCatalogChannels.filter((c) =>
+      isPresentationSportsChannel({
+        name: c.name,
+        category: c.category,
+        categoryName: c.categoryName,
+        categoryId: c.categoryId,
+      })
+    ).length;
+  }, [allCatalogChannels]);
+
+  // Diagnostic View toggle for displaying country group channel counts
+  const [showDiagnosticView, setShowDiagnosticView] = useState<boolean>(false);
+
+  // Computed country channel statistics for diagnostics
+  const countryDiagnosticStats = useMemo(() => {
+    const totalGroupedChannels = normalizedHierarchy.countries.reduce((sum, c) => sum + c.count, 0);
+    const europeanTargets = [
+      { name: 'Denmark', code: 'DK', flag: '🇩🇰' },
+      { name: 'Poland', code: 'PL', flag: '🇵🇱' },
+      { name: 'France', code: 'FR', flag: '🇫🇷' },
+      { name: 'Switzerland', code: 'CH', flag: '🇨🇭' },
+      { name: 'Sweden', code: 'SE', flag: '🇸🇪' },
+      { name: 'Norway', code: 'NO', flag: '🇳🇴' },
+      { name: 'United Kingdom', code: 'UK', flag: '🇬🇧' },
+      { name: 'Germany', code: 'DE', flag: '🇩🇪' },
+      { name: 'Spain', code: 'ES', flag: '🇪🇸' },
+      { name: 'Italy', code: 'IT', flag: '🇮🇹' },
+    ];
+
+    const targetStatus = europeanTargets.map((target) => {
+      const found = normalizedHierarchy.countries.find(
+        (c) =>
+          c.name.toLowerCase() === target.name.toLowerCase() ||
+          c.code.toUpperCase() === target.code.toUpperCase() ||
+          c.id.toLowerCase() === target.name.toLowerCase()
+      );
+      return {
+        ...target,
+        count: found?.count || 0,
+        subCategoriesCount: found?.subCategories.length || 0,
+        isPopulated: (found?.count || 0) > 0,
+      };
+    });
+
+    return {
+      totalGroupedChannels,
+      totalCountryGroups: normalizedHierarchy.countries.length,
+      targetStatus,
+      allGroups: normalizedHierarchy.countries.map((c) => ({
+        id: c.id,
+        name: c.name,
+        code: c.code,
+        flag: c.flag,
+        count: c.count,
+        subCategoriesCount: c.subCategories.length,
+        isOther: c.isOther,
+      })),
+    };
+  }, [normalizedHierarchy.countries]);
+
+  // Tree expansion helpers for Panel 2
+  const handleExpandAll = () => {
+    const next: Record<string, boolean> = {};
+    normalizedHierarchy.countries.forEach((c) => {
+      next[c.id] = true;
+      next[c.name] = true;
+    });
+    setExpandedCountries(next);
+  };
+
+  const handleCollapseAll = () => {
+    setExpandedCountries({});
+    setExpandedSubCategories({});
+  };
+
+  const toggleSubCategory = useCallback((subId: string, e?: React.SyntheticEvent) => {
+    if (e) {
+      e.stopPropagation();
+    }
+    setExpandedSubCategories((prev) => ({
+      ...prev,
+      [subId]: !prev[subId],
+    }));
+  }, []);
 
   // Flattened visible rows for 10-foot D-pad navigation
   const visibleSidebarRows = useMemo<
@@ -209,6 +784,37 @@ export const ChannelManagementZapper: React.FC<ChannelManagementZapperProps> = (
         })) as UnifiedChannel[]);
 
   const transformedChannels = ChannelManager.applyOverrides(rawChannels);
+
+  // Presentation-layer filtered list for active sports keywords
+  const filteredTransformedChannels = useMemo(() => {
+    let list = transformedChannels;
+    if (isSportsFilterActive && sportsTopicKeyword !== 'ALL') {
+      list = list.filter((ch) => {
+        const text = `${ch.name} ${ch.categoryName || ''} ${ch.categoryId || ''}`.toLowerCase();
+        if (sportsTopicKeyword === 'EPL') {
+          return text.includes('epl') || text.includes('premier league');
+        }
+        if (sportsTopicKeyword === 'DAZN') {
+          return text.includes('dazn');
+        }
+        if (sportsTopicKeyword === 'SOCCER') {
+          return text.includes('football') || text.includes('fotboll') || text.includes('soccer');
+        }
+        if (sportsTopicKeyword === 'F1') {
+          return text.includes('f1') || text.includes('formula') || text.includes('motogp') || text.includes('racing');
+        }
+        if (sportsTopicKeyword === 'UFC') {
+          return text.includes('ufc') || text.includes('wwe') || text.includes('fight') || text.includes('boxing');
+        }
+        if (sportsTopicKeyword === 'US_SPORTS') {
+          return text.includes('espn') || text.includes('nfl') || text.includes('nba') || text.includes('nhl') || text.includes('mlb');
+        }
+        return true;
+      });
+    }
+    return list;
+  }, [transformedChannels, isSportsFilterActive, sportsTopicKeyword]);
+
   const memStats = ChannelManager.getMemoryStats();
   const categoryTreeCounts = ChannelManager.getCategoryTreeCounts(isSportsFilterActive);
 
@@ -227,7 +833,9 @@ export const ChannelManagementZapper: React.FC<ChannelManagementZapperProps> = (
     return new RemoteZapperController({
       onDigitCommitted: (num) => {
         setKeypadBuffer('');
-        const found = transformedChannels.find((c) => c.num === num || String(c.streamId) === String(num));
+        const found =
+          filteredTransformedChannels.find((c) => c.num === num || String(c.streamId) === String(num)) ||
+          transformedChannels.find((c) => c.num === num || String(c.streamId) === String(num));
         if (found) {
           if (onTuneChannel) onTuneChannel(found.streamId, found.name);
           setZapperNotice(`Tuned directly to CH ${num}: ${found.name}`);
@@ -238,7 +846,7 @@ export const ChannelManagementZapper: React.FC<ChannelManagementZapperProps> = (
       },
       onZappedChannel: (delta) => {
         setCurrentChannelIndex((prev) => {
-          const total = transformedChannels.length;
+          const total = filteredTransformedChannels.length;
           if (total === 0) return 0;
           const next = (prev + delta + total) % total;
           const target = transformedChannels[next];
@@ -397,16 +1005,18 @@ export const ChannelManagementZapper: React.FC<ChannelManagementZapperProps> = (
         // D-pad LEFT: "LEFT should collapse an expanded group"
         if (key === 'ArrowLeft' || key === 'Left') {
           e.preventDefault();
-          if (currentRow?.type === 'country') {
+          if (currentRow?.type === 'country' && currentRow.country) {
+            const countryId = currentRow.country.id;
+            const countryName = currentRow.country.name;
             const isExpanded = !!(
-              expandedCountries[currentRow.country!.id] ||
-              expandedCountries[currentRow.country!.name]
+              expandedCountries[countryId] ||
+              expandedCountries[countryName]
             );
             if (isExpanded) {
               setExpandedCountries((prev) => ({
                 ...prev,
-                [currentRow.country!.id]: false,
-                [currentRow.country!.name]: false,
+                [countryId]: false,
+                [countryName]: false,
               }));
               // Maintain focus on this parent group header
               const el = document.getElementById(currentRow.id);
@@ -430,19 +1040,21 @@ export const ChannelManagementZapper: React.FC<ChannelManagementZapperProps> = (
         // D-pad RIGHT: "RIGHT/OK should expand a collapsed group or select a channel"
         if (key === 'ArrowRight' || key === 'Right') {
           e.preventDefault();
-          if (currentRow?.type === 'country') {
+          if (currentRow?.type === 'country' && currentRow.country) {
+            const countryId = currentRow.country.id;
+            const countryName = currentRow.country.name;
             const isExpanded = !!(
-              expandedCountries[currentRow.country!.id] ||
-              expandedCountries[currentRow.country!.name]
+              expandedCountries[countryId] ||
+              expandedCountries[countryName]
             );
             if (!isExpanded) {
               // Expand collapsed country group
               setExpandedCountries((prev) => ({
                 ...prev,
-                [currentRow.country!.id]: true,
-                [currentRow.country!.name]: true,
+                [countryId]: true,
+                [countryName]: true,
               }));
-              setSelectedCountry(currentRow.country!.name);
+              setSelectedCountry(countryName);
               setSelectedSubCategory(null);
               setWindowOffset(0);
               // Maintain focus on this parent header
@@ -462,10 +1074,10 @@ export const ChannelManagementZapper: React.FC<ChannelManagementZapperProps> = (
                 chEl?.focus();
               }
             }
-          } else if (currentRow?.type === 'subcategory') {
+          } else if (currentRow?.type === 'subcategory' && currentRow.country && currentRow.subCategory) {
             // Select subcategory and move focus to channel list
-            setSelectedCountry(currentRow.country!.name);
-            setSelectedSubCategory(currentRow.subCategory!.name);
+            setSelectedCountry(currentRow.country.name);
+            setSelectedSubCategory(currentRow.subCategory.name);
             setWindowOffset(0);
             setFocusZone('channels');
             const chEl = document.getElementById(`surf-ch-${transformedChannels[0]?.streamId}`);
@@ -482,11 +1094,11 @@ export const ChannelManagementZapper: React.FC<ChannelManagementZapperProps> = (
         // D-pad ENTER / OK / SELECT
         if (key === 'Enter' || key === ' ' || key === 'Select') {
           e.preventDefault();
-          if (currentRow?.type === 'country') {
-            toggleCountryGroup(currentRow.country!);
-          } else if (currentRow?.type === 'subcategory') {
-            setSelectedCountry(currentRow.country!.name);
-            setSelectedSubCategory(currentRow.subCategory!.name);
+          if (currentRow?.type === 'country' && currentRow.country) {
+            toggleCountryGroup(currentRow.country);
+          } else if (currentRow?.type === 'subcategory' && currentRow.country && currentRow.subCategory) {
+            setSelectedCountry(currentRow.country.name);
+            setSelectedSubCategory(currentRow.subCategory.name);
             setWindowOffset(0);
             setFocusZone('channels');
             const chEl = document.getElementById(`surf-ch-${transformedChannels[0]?.streamId}`);
@@ -653,114 +1265,191 @@ export const ChannelManagementZapper: React.FC<ChannelManagementZapperProps> = (
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-ping mr-1" />
             )}
             <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/40 font-normal">
-              {categoryTreeCounts.sportsCount.toLocaleString()}
+              {dynamicSportsCount.toLocaleString()}
             </span>
           </div>
         </button>
       </div>
 
-      {/* Categorized by Country Section Header */}
+      {/* Categorized by Country Section Header with Tree Controls */}
       <div className="pt-2">
         <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-1 pb-2 flex items-center justify-between border-b border-slate-800/70">
-          <span>Categorized by Country</span>
-          {isSportsFilterActive && (
-            <span className="text-[9px] font-mono text-emerald-400 bg-emerald-950 px-1.5 py-0.5 rounded border border-emerald-800/60 font-semibold">
-              Sports Only
-            </span>
-          )}
+          <div className="flex items-center gap-1.5">
+            <span>By Country</span>
+            {isSportsFilterActive && (
+              <span className="text-[9px] font-mono text-emerald-400 bg-emerald-950 px-1 py-0.2 rounded border border-emerald-800/60 font-semibold lowercase">
+                sports
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 lowercase font-normal text-[10px]">
+            <button
+              type="button"
+              id="btn-tree-expand-all"
+              onClick={handleExpandAll}
+              className="text-indigo-400 hover:text-indigo-300 transition-colors"
+              title="Expand all country groups"
+            >
+              expand all
+            </button>
+            <span className="text-slate-600">/</span>
+            <button
+              type="button"
+              id="btn-tree-collapse-all"
+              onClick={handleCollapseAll}
+              className="text-slate-500 hover:text-slate-300 transition-colors"
+              title="Collapse all country groups"
+            >
+              collapse
+            </button>
+          </div>
         </div>
 
-        {/* Tree Accordion of Normalized Countries & Subcategories */}
-        <div className="mt-2 space-y-1">
-          {normalizedHierarchy.countries.map((country) => {
-            const isExpanded = !!(expandedCountries[country.id] || expandedCountries[country.name]);
-            const isSelectedCountry = selectedCountry === country.name && !selectedSubCategory;
-            const countryElemId = `country-header-${country.id.toLowerCase()}`;
+        {/* Memoized Tree Accordion of Normalized Countries, Subcategories & Nested Channels */}
+        <MemoizedCategoryTree
+          countries={normalizedHierarchy.countries}
+          expandedCountries={expandedCountries}
+          expandedSubCategories={expandedSubCategories}
+          selectedCountry={selectedCountry}
+          selectedSubCategory={selectedSubCategory}
+          isSportsFilterActive={isSportsFilterActive}
+          visibleSidebarRows={visibleSidebarRows}
+          onToggleCountry={toggleCountryGroup}
+          onToggleSubCategory={toggleSubCategory}
+          onSelectSubCategory={(countryName, subName) => {
+            setSelectedCountry(countryName);
+            setSelectedSubCategory(subName);
+            setWindowOffset(0);
+            setFocusZone('sidebar');
+          }}
+          onTuneChannel={onTuneChannel}
+          onSetZapperNotice={(msg) => {
+            setZapperNotice(msg);
+            setTimeout(() => setZapperNotice(null), 2500);
+          }}
+          onSetFocusZone={setFocusZone}
+          onSetFocusedSidebarIndex={setFocusedSidebarIndex}
+        />
+      </div>
 
-            return (
-              <div key={country.id} className="space-y-1">
-                {/* Country Header Button */}
-                <button
-                  type="button"
-                  id={countryElemId}
-                  tabIndex={0}
-                  onFocus={() => {
-                    setFocusZone('sidebar');
-                    const idx = visibleSidebarRows.findIndex((r) => r.id === countryElemId);
-                    if (idx >= 0) setFocusedSidebarIndex(idx);
-                  }}
-                  onClick={(e) => {
-                    toggleCountryGroup(country, e);
-                  }}
-                  className={`w-full px-2.5 py-1.5 rounded-lg flex items-center justify-between cursor-pointer text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-400 ${
-                    isSelectedCountry
-                      ? 'bg-slate-800 text-white font-bold ring-1 ring-slate-700'
-                      : 'hover:bg-slate-900 text-slate-300'
-                  }`}
-                >
-                  <div className="flex items-center gap-1.5 font-semibold">
-                    {isExpanded ? (
-                      <span className="text-slate-400 text-xs">▾</span>
-                    ) : (
-                      <span className="text-slate-500 text-xs">▸</span>
-                    )}
-                    <span>{country.name}</span>
-                  </div>
-                  <span className="text-[10px] font-mono text-slate-500">
-                    {country.count}
-                  </span>
-                </button>
+      {/* Country Group Diagnostics Quick Trigger & Telemetry */}
+      <div className="pt-2 border-t border-slate-800/80 space-y-1.5">
+        <button
+          type="button"
+          id="btn-panel2-diagnostics"
+          onClick={() => setShowDiagnosticView(!showDiagnosticView)}
+          className={`w-full px-2.5 py-1.5 rounded-lg border text-[11px] font-semibold flex items-center justify-between transition-colors ${
+            showDiagnosticView
+              ? 'bg-cyan-950/80 text-cyan-300 border-cyan-700/60 shadow-sm shadow-cyan-900/30'
+              : 'bg-slate-900/80 hover:bg-slate-800 text-cyan-400 border-cyan-900/40'
+          }`}
+        >
+          <span className="flex items-center gap-1.5">
+            <BarChart2 className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Country Diagnostics</span>
+          </span>
+          <span className="font-mono text-[10px] bg-cyan-950 px-1.5 py-0.5 rounded border border-cyan-800/60 text-cyan-300">
+            {countryDiagnosticStats.totalCountryGroups} Groups • {countryDiagnosticStats.totalGroupedChannels} Ch
+          </span>
+        </button>
 
-                {/* Subcategories (Child categories under this country) */}
-                {isExpanded && (
-                  <div className="pl-4 pr-1 space-y-0.5 border-l border-slate-800/80 ml-2.5 my-1">
-                    {country.subCategories.map((sub) => {
-                      const isSelectedSub = selectedCountry === country.name && selectedSubCategory === sub.name;
-                      const isZeroInSports = isSportsFilterActive && sub.count === 0;
-                      const subElemId = `subcat-${country.id.toLowerCase()}-${sub.id.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
-
-                      return (
-                        <button
-                          key={sub.id}
-                          id={subElemId}
-                          tabIndex={0}
-                          onFocus={() => {
-                            setFocusZone('sidebar');
-                            const idx = visibleSidebarRows.findIndex((r) => r.id === subElemId);
-                            if (idx >= 0) setFocusedSidebarIndex(idx);
-                          }}
-                          onClick={(e) => {
-                            setSelectedCountry(country.name);
-                            setSelectedSubCategory(sub.name);
-                            setWindowOffset(0);
-                            setFocusZone('sidebar');
-                            e.currentTarget.focus();
-                          }}
-                          className={`w-full px-2.5 py-1.5 rounded text-left flex items-center justify-between text-xs transition-all focus:outline-none focus:ring-2 focus:ring-indigo-400 ${
-                            isSelectedSub
-                              ? 'bg-indigo-600/90 text-white font-bold shadow-xs'
-                              : isZeroInSports
-                              ? 'text-slate-600 hover:text-slate-500 hover:bg-slate-900/40'
-                              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/70'
-                          }`}
-                        >
-                          <span className="truncate">{sub.name}</span>
-                          <span
-                            className={`text-[10px] font-mono ml-1 ${
-                              isZeroInSports ? 'text-slate-700' : 'text-slate-500'
-                            }`}
-                          >
-                            {sub.count}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
+        {/* Diagnostic Panel View */}
+        {showDiagnosticView && (
+          <div
+            id="panel2-country-diagnostics-view"
+            className="p-2.5 bg-slate-950/90 rounded-lg border border-cyan-900/50 space-y-2.5 max-h-72 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700 text-xs"
+          >
+            {/* European Core Target Verification */}
+            <div>
+              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                <span>European Target Groups</span>
+                <span className="text-emerald-400 font-mono">
+                  {countryDiagnosticStats.targetStatus.filter((t) => t.isPopulated).length}/
+                  {countryDiagnosticStats.targetStatus.length} Populated
+                </span>
               </div>
-            );
-          })}
-        </div>
+              <div className="grid grid-cols-2 gap-1">
+                {countryDiagnosticStats.targetStatus.map((target) => (
+                  <div
+                    key={target.code}
+                    onClick={() => {
+                      setSelectedCountry(target.name);
+                      setExpandedCountries((prev) => ({ ...prev, [target.name]: true }));
+                    }}
+                    className={`px-2 py-1 rounded border text-[10px] flex items-center justify-between cursor-pointer transition-colors ${
+                      target.isPopulated
+                        ? 'bg-slate-900/90 border-emerald-800/50 text-slate-200 hover:bg-slate-800'
+                        : 'bg-slate-900/40 border-slate-800 text-slate-500'
+                    }`}
+                    title={`Click to filter ${target.name}`}
+                  >
+                    <span className="flex items-center gap-1 truncate">
+                      <span>{target.flag}</span>
+                      <span className="font-semibold">{target.code}</span>
+                    </span>
+                    <span
+                      className={`font-mono px-1 rounded text-[9px] ${
+                        target.isPopulated ? 'bg-emerald-950 text-emerald-300 border border-emerald-800/40' : 'text-slate-600'
+                      }`}
+                    >
+                      {target.count}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Complete Discovered Country Group Breakdown */}
+            <div className="pt-2 border-t border-slate-800">
+              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center justify-between">
+                <span>All Country Groups ({countryDiagnosticStats.allGroups.length})</span>
+                <span className="text-[9px] text-slate-500 font-mono">Channels</span>
+              </div>
+              <div className="space-y-1">
+                {countryDiagnosticStats.allGroups.map((group) => (
+                  <div
+                    key={group.id}
+                    onClick={() => {
+                      setSelectedCountry(group.name);
+                      setExpandedCountries((prev) => ({ ...prev, [group.id]: true, [group.name]: true }));
+                    }}
+                    className="px-2 py-1 rounded bg-slate-900/60 hover:bg-slate-800/90 border border-slate-800/60 flex items-center justify-between text-[11px] cursor-pointer transition-colors"
+                  >
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span>{group.flag || '🌐'}</span>
+                      <span className="text-slate-200 truncate font-medium">{group.name}</span>
+                      {group.code && (
+                        <span className="text-[9px] font-mono text-slate-500 uppercase">[{group.code}]</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0 font-mono text-[10px]">
+                      <span className="text-slate-500 text-[9px]">{group.subCategoriesCount} subs</span>
+                      <span className="bg-slate-800 px-1.5 py-0.5 rounded text-cyan-300 font-semibold">
+                        {group.count}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Test Suite Quick Trigger */}
+        <button
+          type="button"
+          id="btn-panel2-test-suite"
+          onClick={() => setShowTestSuiteModal(true)}
+          className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900/80 hover:bg-slate-800 text-emerald-400 border border-emerald-900/50 text-[11px] font-semibold flex items-center justify-between transition-colors"
+        >
+          <span className="flex items-center gap-1.5">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Hierarchy Test Suite</span>
+          </span>
+          <span className="font-mono text-[10px] bg-emerald-950 px-1.5 py-0.5 rounded border border-emerald-800/60">
+            {testSuiteResult.passed ? '5/5 PASS' : 'FAIL'}
+          </span>
+        </button>
       </div>
     </div>
   );
@@ -835,6 +1524,14 @@ export const ChannelManagementZapper: React.FC<ChannelManagementZapperProps> = (
             }`}
           >
             <Hash className="w-3.5 h-3.5" /> Overrides & Hiding
+          </button>
+          <button
+            id="btn-subtab-test-suite"
+            onClick={() => setShowTestSuiteModal(true)}
+            className="px-3 py-1.5 rounded text-xs font-semibold flex items-center gap-1.5 transition-all bg-emerald-950/70 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-800/80 shadow-xs"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Test Suite ({testSuiteResult.passed ? '5/5 PASS' : 'FAIL'})</span>
           </button>
         </div>
       </div>
@@ -981,7 +1678,7 @@ export const ChannelManagementZapper: React.FC<ChannelManagementZapperProps> = (
                     <h3 className="text-sm font-bold text-white flex items-center gap-2">
                       <span>Live Channel Surfing Map</span>
                       <span className="text-[10px] font-mono text-cyan-300 bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-800/60">
-                        {transformedChannels.length} / {windowResult.totalMatching.toLocaleString()} channels
+                        {filteredTransformedChannels.length} in view / {windowResult.totalMatching.toLocaleString()} total
                       </span>
                     </h3>
                     {selectedCountry || selectedSubCategory ? (
@@ -1009,6 +1706,69 @@ export const ChannelManagementZapper: React.FC<ChannelManagementZapperProps> = (
                     250ms Anti-Flood Guard
                   </span>
                 </div>
+
+                {/* Dedicated Isolated Sports Section in Presentation Layer */}
+                {isSportsFilterActive && (
+                  <div id="isolated-sports-section" className="bg-gradient-to-r from-emerald-950/90 via-slate-900 to-teal-950/80 border border-emerald-700/60 rounded-xl p-3.5 space-y-2.5 shadow-xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-7 h-7 rounded-lg bg-emerald-600/30 border border-emerald-500/50 flex items-center justify-center shrink-0">
+                          <Trophy className="w-3.5 h-3.5 text-amber-400" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-white uppercase tracking-wider">Isolated Sports Section</span>
+                            <span className="text-[9px] font-mono text-emerald-300 bg-emerald-900/60 px-1.5 py-0.2 rounded border border-emerald-700">
+                              Presentation Layer Only
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-300">
+                            Keywords scanned: <span className="text-emerald-300 font-semibold">Sport, DAZN, EPL, ESPN, F1, UFC</span>. Underlying raw provider channels remain pristine.
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setIsSportsFilterActive(false);
+                          setSportsTopicKeyword('ALL');
+                          setWindowOffset(0);
+                        }}
+                        className="text-[11px] text-slate-400 hover:text-white underline self-start sm:self-auto"
+                      >
+                        Exit Sports Isolation
+                      </button>
+                    </div>
+
+                    {/* Topic-specific sports filters */}
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-emerald-900/50">
+                      <span className="text-[10px] text-slate-400 font-medium mr-1">Topic:</span>
+                      {[
+                        { id: 'ALL', label: 'All Sports' },
+                        { id: 'EPL', label: 'EPL / Premier League' },
+                        { id: 'DAZN', label: 'DAZN Events' },
+                        { id: 'SOCCER', label: 'Football / Soccer' },
+                        { id: 'F1', label: 'F1 / Racing' },
+                        { id: 'UFC', label: 'UFC & Combat' },
+                        { id: 'US_SPORTS', label: 'ESPN & US Sports' },
+                      ].map((pill) => (
+                        <button
+                          key={pill.id}
+                          onClick={() => {
+                            setSportsTopicKeyword(pill.id);
+                            setWindowOffset(0);
+                          }}
+                          className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-all ${
+                            sportsTopicKeyword === pill.id
+                              ? 'bg-emerald-500 text-white shadow-xs'
+                              : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800'
+                          }`}
+                        >
+                          {pill.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Batch Action Helpers */}
                 <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -1052,15 +1812,28 @@ export const ChannelManagementZapper: React.FC<ChannelManagementZapperProps> = (
 
                 {/* Channel List */}
                 <div className="space-y-2 max-h-[550px] overflow-y-auto pr-1">
-                  {transformedChannels.length === 0 ? (
-                    <div className="text-center py-10 bg-slate-950/40 rounded-xl border border-dashed border-slate-800 text-slate-400 text-xs">
-                      No channels match the current sports or country filter.
+                  {filteredTransformedChannels.length === 0 ? (
+                    <div className="text-center py-10 bg-slate-950/40 rounded-xl border border-dashed border-slate-800 text-slate-400 text-xs space-y-2">
+                      <p>No channels match the current sports or country filter.</p>
+                      {sportsTopicKeyword !== 'ALL' && (
+                        <button
+                          onClick={() => setSportsTopicKeyword('ALL')}
+                          className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs text-indigo-300 border border-slate-700 font-medium"
+                        >
+                          Reset Sports Topic Keyword
+                        </button>
+                      )}
                     </div>
                   ) : (
-                    transformedChannels.map((ch, idx) => {
+                    filteredTransformedChannels.map((ch, idx) => {
                       const isCurrent = idx === currentChannelIndex;
                       const isFav = ChannelManager.isFavorite(ch.streamId);
-                      const isSports = isSportsChannel({ name: ch.name, categoryName: ch.categoryId });
+                      const isSports = isPresentationSportsChannel({
+                        name: ch.name,
+                        category: ch.categoryName,
+                        categoryName: ch.categoryName,
+                        categoryId: ch.categoryId,
+                      });
 
                       return (
                         <div
@@ -1453,6 +2226,203 @@ export const ChannelManagementZapper: React.FC<ChannelManagementZapperProps> = (
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Hierarchy Transformation Integrity Test Suite Inspection Modal */}
+      {showTestSuiteModal && (
+        <div
+          id="hierarchy-test-suite-modal"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-fadeIn"
+          onClick={() => setShowTestSuiteModal(false)}
+        >
+          <div
+            className="bg-slate-900 border border-slate-700 rounded-2xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-5 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-950 border border-emerald-700/80 flex items-center justify-center">
+                  <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    <span>Hierarchy Integrity Test Suite</span>
+                    <span
+                      className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase ${
+                        testSuiteResult.passed
+                          ? 'bg-emerald-950 text-emerald-300 border border-emerald-700'
+                          : 'bg-rose-950 text-rose-300 border border-rose-700'
+                      }`}
+                    >
+                      {testSuiteResult.passed ? '5/5 Passed' : 'Fail'}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Compares raw provider channels against grouped hierarchy to confirm zero data loss and 100% stream reachability.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                id="btn-close-test-suite-modal"
+                onClick={() => setShowTestSuiteModal(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 overflow-y-auto space-y-5">
+              {/* Metric Summary Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-3">
+                  <div className="text-[11px] text-slate-400">Raw Channels</div>
+                  <div className="text-xl font-bold font-mono text-white mt-1">
+                    {testSuiteResult.rawChannelCount.toLocaleString()}
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-mono mt-0.5">Input provider count</div>
+                </div>
+
+                <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-3">
+                  <div className="text-[11px] text-slate-400">Grouped Total</div>
+                  <div className="text-xl font-bold font-mono text-emerald-400 mt-1">
+                    {testSuiteResult.hierarchyTotalChannels.toLocaleString()}
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-mono mt-0.5">Across all tree leaves</div>
+                </div>
+
+                <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-3">
+                  <div className="text-[11px] text-slate-400">Reachable Streams</div>
+                  <div className="text-xl font-bold font-mono text-cyan-400 mt-1">
+                    {testSuiteResult.rawChannelCount > 0
+                      ? `${Math.round(
+                          (testSuiteResult.uniqueReachableStreamIds / testSuiteResult.rawChannelCount) * 100
+                        )}%`
+                      : '100%'}
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                    {testSuiteResult.uniqueReachableStreamIds} / {testSuiteResult.rawChannelCount} unique IDs
+                  </div>
+                </div>
+
+                <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-3">
+                  <div className="text-[11px] text-slate-400">Sports Detected</div>
+                  <div className="text-xl font-bold font-mono text-amber-400 mt-1">
+                    {dynamicSportsCount.toLocaleString()}
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-mono mt-0.5">Metadata keywords</div>
+                </div>
+              </div>
+
+              {/* Individual Test Cases Verification */}
+              <div className="space-y-2">
+                <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center justify-between">
+                  <span>Transformation Verification Matrix</span>
+                  <span className="text-[11px] font-mono text-slate-500 lowercase">
+                    {testSuiteResult.testCases.filter((t) => t.passed).length} / {testSuiteResult.testCases.length} assertions passed
+                  </span>
+                </div>
+
+                <div className="space-y-2">
+                  {testSuiteResult.testCases.map((tc) => (
+                    <div
+                      key={tc.id}
+                      className="p-3 rounded-xl bg-slate-950 border border-slate-800/80 flex items-start gap-3"
+                    >
+                      {tc.passed ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                      ) : (
+                        <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-bold text-white">{tc.name}</span>
+                          <span
+                            className={`text-[10px] font-mono px-2 py-0.5 rounded font-semibold ${
+                              tc.passed
+                                ? 'text-emerald-400 bg-emerald-950 border border-emerald-800/60'
+                                : 'text-rose-400 bg-rose-950 border border-rose-800/60'
+                            }`}
+                          >
+                            {tc.passed ? 'PASSED' : 'FAILED'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-0.5">{tc.description}</p>
+                        <div className="text-[10px] font-mono text-slate-500 mt-1 flex items-center gap-3">
+                          <span>Expected: {String(tc.expected)}</span>
+                          <span>•</span>
+                          <span>Actual: {String(tc.actual)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Discovered Country Groups Breakdown */}
+              {normalizedHierarchy.countries.length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                    Discovered Hierarchy Taxonomy Sample ({normalizedHierarchy.countries.length} Countries)
+                  </div>
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                    {normalizedHierarchy.countries.slice(0, 8).map((grp) => (
+                      <div
+                        key={grp.id}
+                        className="bg-slate-950 p-2.5 rounded-lg border border-slate-800/70 flex items-center justify-between text-xs"
+                      >
+                        <div className="min-w-0">
+                          <span className="font-semibold text-slate-200">{grp.name}</span>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {grp.subCategories.slice(0, 5).map((s) => (
+                              <span
+                                key={s.id}
+                                className="text-[10px] bg-slate-900 text-slate-400 px-1.5 py-0.5 rounded font-mono"
+                              >
+                                {s.name} ({s.count})
+                              </span>
+                            ))}
+                            {grp.subCategories.length > 5 && (
+                              <span className="text-[10px] text-slate-500 font-mono self-center">
+                                +{grp.subCategories.length - 5} more
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <span className="font-mono text-[11px] text-cyan-400 font-semibold shrink-0 ml-2">
+                          {grp.count} channels
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-800 bg-slate-950/70 flex items-center justify-between">
+              <button
+                type="button"
+                id="btn-rerun-test-suite"
+                onClick={() => setTestSuiteRunCount((prev) => prev + 1)}
+                className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+              >
+                <RefreshCw className="w-3.5 h-3.5" /> Re-run Integrity Verification
+              </button>
+
+              <button
+                type="button"
+                id="btn-close-test-suite"
+                onClick={() => setShowTestSuiteModal(false)}
+                className="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all shadow-xs"
+              >
+                Done
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -88,6 +88,8 @@ export function isSportsChannel(ch: { name: string; category?: string; categoryN
     cat.includes('espn') ||
     cat.includes('bein') ||
     cat.includes('dazn') ||
+    cat.includes('epl') ||
+    cat.includes('premier league') ||
     cat.includes('cricket') ||
     cat.includes('tennis') ||
     cat.includes('golf') ||
@@ -131,6 +133,7 @@ export function isSportsChannel(ch: { name: string; category?: string; categoryN
     name.includes('optus sport') ||
     name.includes('stan sport') ||
     name.includes('laliga') ||
+    name.includes('epl') ||
     name.includes('premier league') ||
     name.includes('nfl') ||
     name.includes('nba') ||
@@ -310,11 +313,20 @@ export class VirtualizedDataLoader {
       if (countryLow === 'sweden') {
         matching = matching.filter(
           (c) =>
-            c.categoryName.toLowerCase().startsWith('sweden') ||
+            c.categoryName.toLowerCase().includes('sweden') ||
+            c.categoryName.toLowerCase().includes('sverige') ||
             c.name.toLowerCase().includes('sverige') ||
             c.name.toLowerCase().includes('svt') ||
             c.name.toLowerCase().includes('tv4') ||
-            c.name.toLowerCase().includes('expressen')
+            c.name.toLowerCase().includes('expressen') ||
+            c.name.toLowerCase().includes('viaplay') ||
+            c.name.toLowerCase().includes('teliaplay') ||
+            c.name.toLowerCase().includes('max sport') ||
+            c.categoryName.toLowerCase().includes('expressen') ||
+            c.categoryName.toLowerCase().includes('teliaplay') ||
+            c.categoryName.toLowerCase().includes('viaplay') ||
+            c.categoryName.toLowerCase().includes('max sport') ||
+            c.categoryName.toLowerCase().includes('disney')
         );
       } else if (countryLow === 'uk') {
         matching = matching.filter(
@@ -512,6 +524,10 @@ export class VirtualizedDataLoader {
     this.cacheHits = 0;
     this.cacheMisses = 0;
     this.notifySubscribers();
+  }
+
+  public getCompressedCatalog(): CompressedChannelRecord[] {
+    return this.compressedCatalog;
   }
 
   /**
@@ -860,6 +876,10 @@ export class ChannelManager {
 
   public static getMemoryStats(): VirtualizedMemoryStats {
     return globalVirtualizedDataLoader.getMemoryStats();
+  }
+
+  public static getCompressedCatalog(): CompressedChannelRecord[] {
+    return globalVirtualizedDataLoader.getCompressedCatalog();
   }
 
   public static clearCache(): void {
